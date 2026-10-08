@@ -1,0 +1,100 @@
+{
+  "name": "movielayout",
+  "productName": "MovieLayout",
+  "version": "1.0.0",
+  "description": "動画を分割・再レイアウトして書き出す Electron アプリ (FFmpeg 内蔵)",
+  "main": "src/main/main.js",
+  "license": "GPL-3.0-or-later",
+  "author": "ishikawa",
+  "scripts": {
+    "start": "electron .",
+    "fetch-ffmpeg": "node scripts/fetch-ffmpeg.js",
+    "postinstall": "node scripts/fetch-ffmpeg.js",
+    "test:videos": "node scripts/make-test-videos.js test-videos h264 5",
+    "test:export": "node scripts/test-export.js test-videos/out_4k.mp4 split-lr-stack test-videos/cam1_h264.mp4 test-videos/cam2_h264.mp4 test-videos/cam3_h264.mp4 test-videos/cam4_h264.mp4",
+    "dist:win": "node scripts/fetch-ffmpeg.js --win && electron-builder --win --x64 --publish never",
+    "dist:mac": "node scripts/fetch-ffmpeg.js --mac && electron-builder --mac --arm64 --x64 --publish never",
+    "dist:dir": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "local.movielayout",
+    "productName": "MovieLayout",
+    "copyright": "Copyright (c) ishikawa",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "icon": "build/icon.png",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg/${platform}-${arch}",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-win-x64-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-x64-portable.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.video",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}

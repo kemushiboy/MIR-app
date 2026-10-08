@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>MovieLayout</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand"><span class="logo">▦</span> MovieLayout</div>
+    <div class="group">
+      <button id="btnNew" title="新規 (Ctrl+N)">新規</button>
+      <button id="btnOpen" title="開く (Ctrl+O)">開く</button>
+      <button id="btnSave" title="保存 (Ctrl+S)">保存</button>
+      <button id="btnSaveAs" title="名前を付けて保存 (Ctrl+Shift+S)">名前を付けて保存</button>
+    </div>
+    <div class="group">
+      <button id="btnUndo" title="元に戻す (Ctrl+Z)">↶</button>
+      <button id="btnRedo" title="やり直し (Ctrl+Y)">↷</button>
+    </div>
+    <div class="spacer"></div>
+    <span id="projectName" class="muted"></span>
+    <span id="ffmpegBadge" class="badge muted">FFmpeg 確認中…</span>
+    <button id="btnExportTop" class="primary">書き出し…</button>
+  </header>
+
+  <main class="layout">
+    <!-- 左: ソースとプリセット -->
+    <aside class="panel left">
+      <section>
+        <div class="section-head">
+          <h2>ソース動画</h2>
+          <button id="btnAddSource" class="small primary">＋ 追加</button>
+        </div>
+        <div id="sourceList" class="source-list"></div>
+        <div id="sourceEmpty" class="empty-hint">動画をここにドロップ<br>または「＋ 追加」</div>
+      </section>
+      <section>
+        <div class="section-head"><h2>分割・配置プリセット</h2></div>
+        <div id="presetList" class="preset-list"></div>
+        <button id="btnCustomSplit" class="block">カスタム分割配置…</button>
+      </section>
+    </aside>
+
+    <!-- 中央: キャンバス -->
+    <section class="stage-wrap">
+      <div class="stage-bar">
+        <span id="canvasInfo" class="muted"></span>
+        <div class="spacer"></div>
+        <label class="check"><input type="checkbox" id="optSnap" checked> スナップ</label>
+        <label class="check"><input type="checkbox" id="optLabels" checked> ラベル</label>
+        <label class="check"><input type="checkbox" id="optGrid"> 罫線</label>
+        <button id="btnRealPreview" class="small" title="実際の FFmpeg フィルタで 1 フレーム合成します">実出力プレビュー</button>
+      </div>
+      <div id="stage" class="stage">
+        <canvas id="stageCanvas"></canvas>
+        <div id="stageEmpty" class="stage-empty">
+          <div class="big">▦</div>
+          <p>ソース動画を追加し、左のプリセットを選ぶか<br>タイルを追加してレイアウトを作成します。</p>
+        </div>
+      </div>
+      <div class="timeline">
+        <span class="muted">プレビュー位置</span>
+        <input type="range" id="timeSlider" min="0" max="1" step="0.01" value="0">
+        <span id="timeLabel" class="mono">00:00.00</span>
+      </div>
+    </section>
+
+    <!-- 右: プロパティ / 書き出し -->
+    <aside class="panel right">
+      <nav class="tabs">
+        <button class="tab active" data-tab="layout">レイアウト</button>
+        <button class="tab" data-tab="export">書き出し</button>
+      </nav>
+
+      <div class="tab-body" id="tab-layout">
+        <section>
+          <h2>キャンバス (出力)</h2>
+          <div class="row">
+            <select id="canvasPreset">
+              <option value="3840x2160">4K UHD 3840×2160</option>
+              <option value="4096x2160">DCI 4K 4096×2160</option>
+              <option value="7680x4320">8K UHD 7680×4320</option>
+              <option value="2560x1440">WQHD 2560×1440</option>
+              <option value="1920x1080">Full HD 1920×1080</option>
+              <option value="1080x1920">縦 1080×1920</option>
+              <option value="2160x3840">縦 4K 2160×3840</option>
+              <option value="custom">カスタム</option>
+            </select>
+          </div>
+          <div class="grid2">
+            <label>幅<input type="number" id="canvasW" min="2" step="2"></label>
+            <label>高さ<input type="number" id="canvasH" min="2" step="2"></label>
+            <label>フレームレート
+              <select id="canvasFps">
+                <option value="auto">ソースと同じ</option>
+                <option value="24000/1001">23.976</option>
+                <option value="24">24</option>
+                <option value="25">25</option>
+                <option value="30000/1001">29.97</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+                <option value="60000/1001">59.94</option>
+                <option value="60">60</option>
+              </select>
+            </label>
+            <label>背景色<input type="color" id="canvasBg" value="#000000"></label>
+          </div>
+          <button id="btnFitCanvas" class="small">キャンバスをタイルに合わせる</button>
+        </section>
+
+        <section id="tileProps" class="hidden">
+          <div class="section-head">
+            <h2>選択中のタイル <span id="tileTitle" class="muted"></span></h2>
+          </div>
+          <div class="grid2">
+            <label>ソース<select id="tileSource"></select></label>
+            <label>ラベル<input type="text" id="tileLabel"></label>
+          </div>
+          <h3>切り出し (ソース上の範囲)</h3>
+          <canvas id="cropCanvas" class="crop-canvas" title="ドラッグで切り出し位置を移動"></canvas>
+          <div class="grid4">
+            <label>X<input type="number" id="cropX" step="2"></label>
+            <label>Y<input type="number" id="cropY" step="2"></label>
+            <label>幅<input type="number" id="cropW" step="2"></label>
+            <label>高さ<input type="number" id="cropH" step="2"></label>
+          </div>
+          <h3>配置 (キャンバス上の位置)</h3>
+          <div class="grid4">
+            <label>X<input type="number" id="destX" step="2"></label>
+            <label>Y<input type="number" id="destY" step="2"></label>
+            <label>幅<input type="number" id="destW" step="2"></label>
+            <label>高さ<input type="number" id="destH" step="2"></label>
+          </div>
+          <div id="tileScaleNote" class="note warn hidden"></div>
+          <div class="btn-row">
+            <button id="btnTileNative" class="small" title="配置サイズを切り出しサイズと同じにします (拡大縮小なし)">等倍</button>
+            <button id="btnTileFront" class="small" title="最前面へ">前面へ</button>
+            <button id="btnTileBack" class="small" title="最背面へ">背面へ</button>
+            <button id="btnTileDup" class="small" title="複製 (Ctrl+D)">複製</button>
+            <button id="btnTileDel" class="small danger" title="削除 (Delete)">削除</button>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>タイル一覧</h2>
+            <button id="btnAddTile" class="small">＋ タイル</button>
+          </div>
+          <div id="tileList" class="tile-list"></div>
+        </section>
+      </div>
+
+      <div class="tab-body hidden" id="tab-export">
+        <section>
+          <h2>映像</h2>
+          <label>コーデック<select id="outCodec"></select></label>
+          <label>エンコーダ<select id="outHw"></select></label>
+          <label>画質<select id="outQuality"></select></label>
+          <label id="bitrateRow" class="hidden">ビットレート (Mbps)
+            <input type="number" id="outBitrate" min="0" step="1" placeholder="自動 (ソース相当)">
+          </label>
+          <label>ピクセルフォーマット
+            <select id="outPixFmt">
+              <option value="source">ソースと同じ</option>
+              <option value="yuv420p">yuv420p (4:2:0 8bit)</option>
+              <option value="yuv422p">yuv422p (4:2:2 8bit)</option>
+              <option value="yuv444p">yuv444p (4:4:4 8bit)</option>
+              <option value="yuv420p10le">yuv420p10le (4:2:0 10bit)</option>
+              <option value="yuv422p10le">yuv422p10le (4:2:2 10bit)</option>
+              <option value="yuv444p10le">yuv444p10le (4:4:4 10bit)</option>
+            </select>
+          </label>
+          <label>コンテナ
+            <select id="outContainer">
+              <option value="auto">自動 (ソースと同じ形式)</option>
+            </select>
+          </label>
+        </section>
+        <section>
+          <h2>音声・尺</h2>
+          <label>音声<select id="outAudio"></select></label>
+          <label>尺
+            <select id="outDurMode">
+              <option value="shortest">最短のソースに合わせる</option>
+              <option value="longest">最長のソースに合わせる (終わったソースは最終フレームで静止)</option>
+              <option value="custom">秒数を指定</option>
+            </select>
+          </label>
+          <label id="durSecRow" class="hidden">秒数<input type="number" id="outDurSec" min="0" step="0.1"></label>
+        </section>
+        <section>
+          <h2>出力先</h2>
+          <div class="row">
+            <input type="text" id="outPath" placeholder="(最初のソースと同じフォルダ)">
+            <button id="btnBrowseOut" class="small">参照…</button>
+          </div>
+        </section>
+        <section>
+          <h2>書き出し内容</h2>
+          <div id="planSummary" class="plan-summary"></div>
+          <details>
+            <summary>FFmpeg コマンド</summary>
+            <pre id="planCommand" class="cmd"></pre>
+            <button id="btnCopyCmd" class="small">コピー</button>
+          </details>
+        </section>
+        <section class="export-actions">
+          <button id="btnStartExport" class="primary block big">書き出し開始</button>
+          <button id="btnCancelExport" class="danger block hidden">中止</button>
+          <div id="progressBox" class="progress-box hidden">
+            <div class="progress"><div id="progressBar"></div></div>
+            <div id="progressText" class="mono small-text"></div>
+          </div>
+          <div id="doneBox" class="hidden"></div>
+          <details id="logDetails">
+            <summary>ログ</summary>
+            <pre id="logView" class="log"></pre>
+          </details>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status">準備完了</span>
+    <div class="spacer"></div>
+    <span id="statusRight" class="muted"></span>
+  </footer>
+
+  <!-- 分割配置ダイアログ -->
+  <dialog id="splitDialog">
+    <form method="dialog" class="dialog-body">
+      <h2 id="splitTitle">分割・配置</h2>
+      <p id="splitDesc" class="muted"></p>
+      <div class="split-grid">
+        <div>
+          <label>対象ソース<select id="spTarget"></select></label>
+          <div class="grid2">
+            <label>横方向の分割数 (列)<input type="number" id="spCols" min="1" max="16" value="2"></label>
+            <label>縦方向の分割数 (行)<input type="number" id="spRows" min="1" max="16" value="1"></label>
+          </div>
+          <label>ソース内の断片の並べ方
+            <select id="spPieceFlow">
+              <option value="vertical">縦に積む (上→下)</option>
+              <option value="horizontal">横に並べる (左→右)</option>
+              <option value="grid">元の位置のまま</option>
+            </select>
+          </label>
+          <label>ソース同士の並べ方
+            <select id="spBlockFlow">
+              <option value="horizontal">横に並べる</option>
+              <option value="vertical">縦に並べる</option>
+              <option value="grid">グリッド</option>
+            </select>
+          </label>
+          <label id="spGridColsRow">グリッドの列数<input type="number" id="spGridCols" min="1" max="16" value="2"></label>
+          <label class="check"><input type="checkbox" id="spReverse"> 断片の順番を逆にする</label>
+          <label>既存タイル
+            <select id="spMode">
+              <option value="replace">置き換える</option>
+              <option value="append">追加する</option>
+            </select>
+          </label>
+          <div id="spOriginRow" class="grid2 hidden">
+            <label>配置開始 X<input type="number" id="spOx" value="0" step="2"></label>
+            <label>配置開始 Y<input type="number" id="spOy" value="0" step="2"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="spFitCanvas" checked> キャンバスをレイアウトに合わせる</label>
+        </div>
+        <div>
+          <canvas id="spPreview" class="sp-preview"></canvas>
+          <div id="spResult" class="muted center"></div>
+        </div>
+      </div>
+      <div class="btn-row end">
+        <button value="cancel">キャンセル</button>
+        <button id="spApply" value="apply" class="primary">適用</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 実出力プレビュー -->
+  <dialog id="previewDialog" class="wide">
+    <form method="dialog" class="dialog-body">
+      <div class="section-head">
+        <h2>実出力プレビュー <span id="previewInfo" class="muted"></span></h2>
+        <button value="close">閉じる</button>
+      </div>
+      <div class="preview-img-wrap"><img id="previewImg" alt=""></div>
+    </form>
+  </dialog>
+
+  <script src="presets.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
