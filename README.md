@@ -14,7 +14,47 @@
                                        └──┴──┴──┴──┘
 ```
 
-## セットアップ
+## インストールと初回起動
+
+[Releases](https://github.com/kemushiboy/MIR-app/releases) から使っている環境に合うファイルをダウンロードします。
+
+| 環境 | ファイル |
+|---|---|
+| Windows (64bit) | `MIR-app-<ver>-win-x64-setup.exe` (インストーラ) または `MIR-app-<ver>-win-x64-portable.exe` (インストール不要) |
+| Mac (Apple Silicon: M1 以降) | `MIR-app-<ver>-mac-arm64.dmg` |
+| Mac (Intel) | `MIR-app-<ver>-mac-x64.dmg` |
+
+MIR-app はコード署名をしていないため、初回だけ OS の警告が出ます。以下の手順で開いてください。
+
+### Windows
+
+1. ダウンロードした exe を実行すると「Windows によって PC が保護されました」と表示されます。
+2. **「詳細情報」** をクリックし、表示された **「実行」** ボタンを押します。
+
+ブラウザ (Edge など) がダウンロード時に「一般的にダウンロードされていません」と警告した場合は、
+ダウンロード一覧の「…」→「保存」→「詳細表示」→「保持する」で保存できます。
+
+### macOS
+
+1. dmg を開き、MIR-app を「アプリケーション」フォルダへドラッグします。
+2. MIR-app をダブルクリックします。「開いていません」「Apple は検証できませんでした」という警告が出たら **「完了」** を押します。
+3. **「システム設定」→「プライバシーとセキュリティ」** を開き、一番下までスクロールします。
+   「"MIR-app" は Mac を保護するためにブロックされました」の横の **「このまま開く」** を押します。
+4. 確認ダイアログでもう一度 **「このまま開く」** を押し、Mac のパスワード (または Touch ID) で許可します。
+
+2 回目以降は普通にダブルクリックで起動できます。
+
+> macOS 14 (Sonoma) 以前では、Finder で MIR-app を右クリック →「開く」→「開く」でも起動できます。
+> macOS 15 (Sequoia) 以降はこの方法が使えないため、上の手順で開いてください。
+
+**「"MIR-app" は壊れているため開けません」と表示される場合** は、ターミナルで次を実行してから開き直してください
+（ダウンロードしたファイルに付く「隔離」属性を外すコマンドです）。
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MIR-app.app
+```
+
+## 開発環境のセットアップ
 
 ```bash
 npm install
@@ -54,24 +94,14 @@ macOS は [ffmpeg.martin-riedl.de](https://ffmpeg.martin-riedl.de/)（arm64 / x6
 
 Windows ランナーと macOS ランナー (Apple Silicon、x64 版も同時に作成) が並行して動きます。
 
-### 署名と公証 (任意)
+### コード署名について
 
-署名なしでもビルドはできますが、配布先では次の警告が出ます。
+MIR-app はフリーウェアのため、**コード署名なしで配布** しています。そのため初回起動時に OS の警告が出ます。
+開き方は [インストールと初回起動](#インストールと初回起動) を参照してください。
 
-- **Windows**: SmartScreen の「Windows によって PC が保護されました」→「詳細情報」→「実行」で起動できます。
-- **macOS**: 署名・公証のないアプリは Gatekeeper にブロックされます。Finder でアプリを右クリック →「開く」、
-  または「システム設定 → プライバシーとセキュリティ」で「このまま開く」を選びます。
-  「壊れているため開けません」と表示される場合は、ターミナルで `xattr -dr com.apple.quarantine /Applications/MIR-app.app` を実行してください。
-
-警告なしで配布するには、GitHub の Secrets (または手元の環境変数) に次を設定します。
-
-| 用途 | Secrets 名 (Actions) | 手元でのビルド時の環境変数 |
-|---|---|---|
-| macOS 署名 (Developer ID Application 証明書 .p12 の base64 とパスワード) | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` | `CSC_LINK`, `CSC_KEY_PASSWORD` (キーチェーンに証明書があれば不要) |
-| macOS 公証 | `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | 同名 |
-| Windows 署名 (.pfx の base64 とパスワード) | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | `CSC_LINK`, `CSC_KEY_PASSWORD` |
-
-macOS では Hardened Runtime を有効にしてあり、同梱の ffmpeg / ffprobe もアプリと一緒に署名されます。
+将来署名する場合に備えて、ワークフローは GitHub の Secrets に証明書を登録すれば自動で署名する設定になっています
+（macOS: `MAC_CSC_LINK` / `MAC_CSC_KEY_PASSWORD`、公証: `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`）。
+未設定のままなら署名なしでビルドされます。
 
 `npm run dist:dir` は現在の OS 向けに未パッケージのフォルダ (`dist/win-unpacked` など) だけを作ります。
 
@@ -170,8 +200,32 @@ src/renderer/         UI (index.html / style.css / app.js / presets.js)
 scripts/              FFmpeg 取得・テスト用スクリプト
 ```
 
-## ライセンスに関する注意
+## ライセンス
 
-同梱している FFmpeg は libx264 / libx265 などを含む **GPL ビルド** です。このアプリを配布する場合は
-GPL の条件（ソースコードの提供など）に従ってください。FFmpeg のライセンス文は `vendor/ffmpeg/*/LICENSE.txt` に、
-取得元 URL は `SOURCE.txt` に保存されます。
+MIR-app は **GNU General Public License v3.0 以降 (GPL-3.0-or-later)** で公開しているフリーソフトウェアです。
+全文は [LICENSE](LICENSE) を参照してください。
+
+```
+MIR-app
+Copyright (C) 2026 ishikawa
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+```
+
+アプリには次のソフトウェアを同梱しています。取得元とソースコードの入手先は
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) にまとめています（配布するアプリにも同じ文書が入ります）。
+
+| ソフトウェア | ライセンス |
+|---|---|
+| [FFmpeg](https://ffmpeg.org/) (libx264 / libx265 などを含む GPL ビルド) | GPL |
+| [Electron](https://www.electronjs.org/) / Chromium | MIT / 各種 (アプリ内の `LICENSE.electron.txt` / `LICENSES.chromium.html`) |
+
+MIR-app を改変して再配布する場合も GPL の条件（ソースコードの提供、同じライセンスでの公開など）に従ってください。
