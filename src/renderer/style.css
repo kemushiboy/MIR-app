@@ -190,6 +190,8 @@ label.check input { margin: 0; }
 .ws-toolbar { border-bottom: 1px solid var(--line); }
 .ws-footer { border-top: 1px solid var(--line); gap: var(--sp-3); }
 .ws-footer input[type=range] { flex: 1; }
+.footer-note { color: var(--warn-text); font-size: var(--fs-xs); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.footer-note:empty { display: none; }
 .toolbar-group { display: flex; align-items: center; gap: var(--sp-1); }
 .toolbar-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-sm); }
 .stage { flex: 1; position: relative; min-height: 0; overflow: hidden;

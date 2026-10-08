@@ -76,9 +76,11 @@
         </div>
       </div>
       <div class="ws-footer">
-        <span class="muted">プレビュー位置</span>
+        <button id="btnPlay" class="small icon" title="再生 (Space)" aria-label="再生 / 一時停止">▶</button>
+        <span class="muted">再生位置</span>
         <input type="range" id="timeSlider" min="0" max="1" step="0.01" value="0">
         <span id="timeLabel" class="mono">00:00.00</span>
+        <span id="playNote" class="footer-note"></span>
       </div>
     </section>
 
@@ -246,7 +248,7 @@
         <section>
           <h2>投影する映像</h2>
           <div class="seg block" id="simSourceSeg">
-            <button data-v="layout" class="active">レイアウト編集の結果</button>
+            <button data-v="sources" class="active">ソース動画 (横に並べる)</button>
             <button data-v="file">ファイル</button>
           </div>
           <div id="simFileRow" class="file-pick hidden">
@@ -410,6 +412,7 @@
   </dialog>
 
   <script src="shell.js"></script>
+  <script src="player.js"></script>
   <script src="presets.js"></script>
   <script src="app.js"></script>
   <script src="workspaces.js"></script>

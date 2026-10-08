@@ -1,4 +1,4 @@
-/* global Presets, api, App, $, setStatus, fmtTime, clamp, debounce, escapeHtml, setupCanvas, cssVar */
+/* global Presets, Player, api, App, $, setStatus, fmtTime, clamp, debounce, escapeHtml, setupCanvas, cssVar */
 'use strict';
 // レイアウト編集ワークスペース。共通ヘルパーは shell.js、api は preload (window.api) が提供する
 
@@ -113,6 +113,7 @@ function updateTitle() {
   const name = state.projectPath ? state.projectPath.split(/[\\/]/).pop() : '無題';
   $('projectName').textContent = name + (state.dirty ? ' *' : '');
   document.title = `${name}${state.dirty ? ' *' : ''} - MIR-app`;
+  api.setDirty(state.dirty);
 }
 
 // ==================================================================
@@ -173,6 +174,14 @@ function removeSource(s) {
   if (!tileById(state.selected)) state.selected = null;
   renderSources();
   commit();
+}
+
+/** 描画に使うフレーム: 再生できるソースは動画そのもの、できない形式はサムネイル (静止画) */
+function frameOf(s) {
+  const v = s && s.probe ? Player.drawable(s.id) : null;
+  if (v) return { img: v, scale: v.videoWidth / s.probe.width };
+  if (s && s.thumb) return { img: s.thumb.img, scale: s.thumb.scale };
+  return null;
 }
 
 const thumbQueue = new Map();
@@ -463,9 +472,10 @@ function drawStage() {
     const y = Y(t.dest.y);
     const w = t.dest.w * sc;
     const h = t.dest.h * sc;
-    if (s && s.thumb) {
-      const k = s.thumb.scale;
-      ctx.drawImage(s.thumb.img, t.crop.x * k, t.crop.y * k, t.crop.w * k, t.crop.h * k, x, y, w, h);
+    const fr = frameOf(s);
+    if (fr) {
+      const k = fr.scale;
+      ctx.drawImage(fr.img, t.crop.x * k, t.crop.y * k, t.crop.w * k, t.crop.h * k, x, y, w, h);
     } else {
       ctx.fillStyle = (s ? s.color : '#888') + '33';
       ctx.fillRect(x, y, w, h);
@@ -770,12 +780,13 @@ function drawCrop() {
   crop.scale = Math.min((cw - 8) / W, (ch - 8) / H);
   crop.ox = (cw - W * crop.scale) / 2;
   crop.oy = (ch - H * crop.scale) / 2;
-  if (s.thumb) {
+  const fr = frameOf(s);
+  if (fr) {
     ctx.globalAlpha = 0.45;
-    ctx.drawImage(s.thumb.img, crop.ox, crop.oy, W * crop.scale, H * crop.scale);
+    ctx.drawImage(fr.img, crop.ox, crop.oy, W * crop.scale, H * crop.scale);
     ctx.globalAlpha = 1;
-    const k = s.thumb.scale;
-    ctx.drawImage(s.thumb.img, t.crop.x * k, t.crop.y * k, t.crop.w * k, t.crop.h * k,
+    const k = fr.scale;
+    ctx.drawImage(fr.img, t.crop.x * k, t.crop.y * k, t.crop.w * k, t.crop.h * k,
       crop.ox + t.crop.x * crop.scale, crop.oy + t.crop.y * crop.scale, t.crop.w * crop.scale, t.crop.h * crop.scale);
   }
   // 他のタイルが同じソースのどこを使っているか
@@ -887,14 +898,52 @@ function syncTimeline() {
   const sl = $('timeSlider');
   sl.max = Math.max(0.01, max);
   if (state.previewTime > max) state.previewTime = 0;
-  sl.value = state.previewTime;
+  if (document.activeElement !== sl) sl.value = state.previewTime;
   $('timeLabel').textContent = `${fmtTime(state.previewTime)} / ${fmtTime(max)}`;
 }
 $('timeSlider').addEventListener('input', () => {
   state.previewTime = Number($('timeSlider').value);
+  Player.seek(state.previewTime);
   $('timeLabel').textContent = `${fmtTime(state.previewTime)} / ${fmtTime(timelineRange())}`;
   reloadThumbs();
 });
+
+/** ソース動画の同期再生 (player.js) にソース・尺・音声の設定を反映する */
+function syncPlayer() {
+  Player.sync(state.sources.filter((s) => s.probe && !s.missing).map((s) => ({ id: s.id, path: s.path, offset: s.offset || 0 })));
+  Player.setDuration(timelineRange());
+  const a = state.output.audio;
+  Player.setAudio(a.mode === 'source' ? [a.sourceId] : a.mode === 'mix' ? state.sources.map((s) => s.id) : []);
+  updatePlayUi();
+}
+
+function updatePlayUi() {
+  const btn = $('btnPlay');
+  btn.disabled = !state.sources.some((s) => s.probe) || !Player.duration;
+  btn.textContent = Player.playing ? '❚❚' : '▶';
+  btn.title = Player.playing ? '一時停止 (Space)' : '再生 (Space)';
+  const bad = Player.unplayable().map((id) => `S${sourceIndex(id) + 1}`).filter((x) => x !== 'S0');
+  $('playNote').textContent = bad.length ? `${bad.join('・')} はアプリ内で再生できない形式のため静止画で表示` : '';
+}
+
+/** 再生中の通知: 'frame' で描き直し、'time' で再生位置を更新する */
+function onPlayer(type) {
+  if (type === 'frame') {
+    drawStage();
+    drawCrop();
+  } else if (type === 'time') {
+    state.previewTime = Player.time;
+    syncTimeline();
+  } else if (type === 'state') {
+    updatePlayUi();
+    if (!Player.playing) reloadThumbs(); // 再生できないソースの静止画を止めた位置に合わせる
+  } else if (type === 'ready') {
+    updatePlayUi();
+    drawStage();
+    drawCrop();
+  }
+}
+$('btnPlay').onclick = () => Player.toggle();
 
 $('btnRealPreview').onclick = async () => {
   const btn = $('btnRealPreview');
@@ -1321,6 +1370,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); dupTile(); return; }
+  if (e.key === ' ' && !mod) { e.preventDefault(); Player.toggle(); return; }
   const t = tileById(state.selected);
   if (!t) return;
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delTile(); return; }
@@ -1357,8 +1407,10 @@ $('btnAddSource').onclick = async () => {
 };
 $('btnCustomSplit').onclick = () => openSplitDialog(null);
 
-window.addEventListener('beforeunload', (e) => {
-  if (state.dirty) e.returnValue = false;
+// 閉じるときの確認はメインプロセスが行う (未保存かどうかだけ伝える)
+api.onSaveAndClose(async () => {
+  await saveProject(false);
+  if (!state.dirty) api.closeNow(); // 保存ダイアログをキャンセルした場合は閉じない
 });
 
 // ==================================================================
@@ -1366,6 +1418,7 @@ window.addEventListener('beforeunload', (e) => {
 // ==================================================================
 
 function refreshAll() {
+  syncPlayer();
   drawStage();
   renderTileList();
   renderTileProps();
@@ -1422,6 +1475,7 @@ function refreshAll() {
       setTimeout(async () => {
         if (info.devWs) await App.show(info.devWs);
         if (info.devSimView && window.SimulatorWorkspace) window.SimulatorWorkspace.setView(info.devSimView);
+        if (info.devPlay) setTimeout(() => Player.play(), 800);
         if (info.devTab) showTab(info.devTab);
         if (info.devSelect && state.tiles[info.devSelect - 1]) selectTile(state.tiles[info.devSelect - 1].id);
         api.devReady();
@@ -1442,33 +1496,30 @@ function refreshAll() {
 
 window.LayoutWorkspace = {
   show() {
+    Player.on(onPlayer);
+    syncPlayer();
     drawStage();
     drawCrop();
     refreshPlan(); // ステータスバー右側 (書き出し設定の要約) を戻す
   },
   hide() {
+    Player.pause(); // 非表示のタブでは再生しない
+    Player.off(onPlayer);
     stage.drag = null;
     crop.drag = null;
     if (!state.exporting) $('statusRight').textContent = ''; // ステータスバーは表示中のタブのもの
   },
   onDropFiles: addSources,
-  /** 現在のレイアウトを、プレビュー位置の静止画として合成する (他のタブから利用) */
-  renderComposite(maxWidth = 4096) {
-    if (!state.tiles.length) return null;
-    const { width: W, height: H } = state.canvas;
-    const k = Math.min(1, maxWidth / W);
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(W * k);
-    cv.height = Math.round(H * k);
-    const ctx = cv.getContext('2d');
-    ctx.fillStyle = state.canvas.background;
-    ctx.fillRect(0, 0, cv.width, cv.height);
-    for (const t of state.tiles) {
-      const s = sourceById(t.sourceId);
-      if (!s || !s.thumb) continue;
-      const q = s.thumb.scale;
-      ctx.drawImage(s.thumb.img, t.crop.x * q, t.crop.y * q, t.crop.w * q, t.crop.h * q, t.dest.x * k, t.dest.y * k, t.dest.w * k, t.dest.h * k);
-    }
-    return cv;
+  /** 投影シミュレーター用: ソース動画の一覧 (追加順)。frame() は現在のフレーム (動画または静止画) を返す */
+  projectionSources() {
+    syncPlayer();
+    return state.sources.filter((s) => s.probe && !s.missing).map((s) => ({
+      id: s.id,
+      label: `S${sourceIndex(s.id) + 1}`,
+      name: s.name,
+      width: s.probe.width,
+      height: s.probe.height,
+      frame: () => frameOf(s),
+    }));
   },
 };

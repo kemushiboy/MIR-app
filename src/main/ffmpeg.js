@@ -281,6 +281,12 @@ class ExportJob {
     });
   }
 
+  /** 即座に終了させる (アプリ終了時) */
+  kill() {
+    this.cancelled = true;
+    if (this.proc && this.proc.exitCode == null) this.proc.kill();
+  }
+
   cancel() {
     if (!this.proc || this.proc.exitCode != null) return;
     this.cancelled = true;

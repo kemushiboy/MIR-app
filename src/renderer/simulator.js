@@ -1,4 +1,4 @@
-/* global App, Figures, SimGL, api, $, setStatus, fmtTime, clamp, debounce, escapeHtml, setupCanvas, cssVar, fileUrl */
+/* global App, Figures, SimGL, Player, api, $, setStatus, fmtTime, clamp, debounce, escapeHtml, setupCanvas, cssVar, fileUrl */
 /**
  * 投影シミュレーター: 壁面 (既定 20m × 3m) に映像を投影した想定で、
  *   - 実寸比較: 立面図に人物のシルエットを実寸で並べる
@@ -24,7 +24,7 @@ window.SimulatorWorkspace = (() => {
     ].map(([label, height, x], i) => ({ id: seq++, label, height, x, color: Figures.COLORS[i % Figures.COLORS.length] }));
     return {
       wall: { width: 20, height: 3, bottom: 0, fit: 'contain' },
-      source: { kind: 'layout', path: null },
+      source: { kind: 'sources', path: null },
       figures: figs,
       viewerId: figs[1].id,
       compareId: figs[3].id,
@@ -129,11 +129,56 @@ window.SimulatorWorkspace = (() => {
     invalidate();
   }
 
-  function loadLayoutContent() {
+  /**
+   * ソース動画を追加順に左から横に並べた「帯」(プロジェクター 1 台 = ソース 1 本の想定)。
+   * 再生中は毎フレーム描き直す。幅は GPU に送りやすい 4096px 以内に収める。
+   */
+  const strip = { canvas: document.createElement('canvas'), segs: [], h: 0 };
+
+  function loadSourcesContent() {
     releaseVideo();
-    const comp = window.LayoutWorkspace && window.LayoutWorkspace.renderComposite(4096);
-    if (comp) setContent(comp, comp.width, comp.height, 'レイアウト編集の結果 (プレビュー位置の静止画)');
-    else setContent(placeholder('レイアウト編集でタイルを配置すると、ここに表示されます'), 2000, 300, 'レイアウト編集にタイルがありません');
+    const list = window.LayoutWorkspace ? window.LayoutWorkspace.projectionSources() : [];
+    if (!list.length) {
+      strip.segs = [];
+      setContent(placeholder('レイアウト編集タブでソース動画を追加すると、ここに投影されます'), 2000, 300, 'ソース動画がありません');
+      return;
+    }
+    const sumAspect = list.reduce((a, s) => a + s.width / s.height, 0);
+    const h = Math.max(64, Math.min(1080, Math.floor(4096 / sumAspect)));
+    let x = 0;
+    strip.segs = list.map((src) => {
+      const w = Math.round((h * src.width) / src.height);
+      const seg = { src, x, w };
+      x += w;
+      return seg;
+    });
+    strip.h = h;
+    strip.canvas.width = x;
+    strip.canvas.height = h;
+    paintStrip();
+    setContent(strip.canvas, x, h, `ソース動画 ${list.length} 本`);
+  }
+
+  function paintStrip() {
+    const ctx = strip.canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, strip.canvas.width, strip.canvas.height);
+    for (const seg of strip.segs) {
+      const fr = seg.src.frame();
+      if (fr) ctx.drawImage(fr.img, 0, 0, seg.src.width * fr.scale, seg.src.height * fr.scale, seg.x, 0, seg.w, strip.h);
+    }
+    contentDirty = true;
+  }
+
+  /** 共通プレーヤーからの通知 (ソース動画を投影しているときだけ使う) */
+  function onPlayer(type) {
+    if (S.source.kind !== 'sources') return;
+    if (type === 'frame' || type === 'ready') {
+      paintStrip();
+      invalidate();
+    }
+    if (type !== 'frame') syncTimeUi();
+    else if (Player.playing) syncTimeUi();
   }
 
   const IMAGE_RE = /\.(png|jpe?g|webp|bmp|gif)$/i;
@@ -194,7 +239,7 @@ window.SimulatorWorkspace = (() => {
   }, 200);
 
   function reloadContent() {
-    if (S.source.kind === 'layout') loadLayoutContent();
+    if (S.source.kind === 'sources') loadSourcesContent();
     else loadFileContent(S.source.path);
   }
 
@@ -280,6 +325,28 @@ window.SimulatorWorkspace = (() => {
       const [cx0, cy0, cx1, cy1] = p.crop;
       ctx.drawImage(content.el, cx0 * content.w, cy0 * content.h, (cx1 - cx0) * content.w, (cy1 - cy0) * content.h,
         X(p.x), Y(p.y + p.h), p.w * T.scale, p.h * T.scale);
+    }
+    // プロジェクター (ソース動画) ごとの境界
+    if (S.source.kind === 'sources' && strip.segs.length > 1 && content.el === strip.canvas) {
+      const p = contentPlacement();
+      const [c0, , c1] = p.crop;
+      const toX = (u) => X(p.x + ((u - c0) / (c1 - c0)) * p.w);
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = 'rgba(255,255,255,.55)';
+      ctx.lineWidth = 1;
+      for (const seg of strip.segs) {
+        const u0 = seg.x / strip.canvas.width;
+        const u1 = (seg.x + seg.w) / strip.canvas.width;
+        if (u1 <= c0 || u0 >= c1) continue;
+        if (seg.x > 0 && u0 > c0) {
+          ctx.beginPath();
+          ctx.moveTo(Math.round(toX(u0)) + 0.5, Y(p.y + p.h));
+          ctx.lineTo(Math.round(toX(u0)) + 0.5, Y(p.y));
+          ctx.stroke();
+        }
+        if (T.scale > 12) label(ctx, seg.src.label, toX(Math.max(u0, c0)) + 6, Y(p.y + p.h) + 20, col.text, 'left');
+      }
+      ctx.setLineDash([]);
     }
     // 1m グリッド
     if (S.showGrid) {
@@ -622,8 +689,10 @@ window.SimulatorWorkspace = (() => {
     $('simFileName').textContent = S.source.path ? S.source.path.split(/[\\/]/).pop() : '未選択';
     $('simFileName').title = S.source.path || '';
     const note = $('simSourceNote');
-    note.textContent = S.source.kind === 'layout'
-      ? 'レイアウト編集タブで作った構成を、プレビュー位置の静止画として映します。動画で確認するときは書き出したファイルを選んでください。'
+    const bad = Player.unplayable().length;
+    note.textContent = S.source.kind === 'sources'
+      ? `レイアウト編集タブで読み込んだソース動画を、追加順に左から横に並べて投影します (プロジェクター ${strip.segs.length || 'N'} 台の想定)。` +
+        (bad ? ' 再生できない形式のソースは静止画で表示します。' : '')
       : content.still ? 'この形式はアプリ内で再生できないため静止画で表示します。再生位置スライダーでフレームを選べます。' : '動画は再生ボタンで再生できます (音声なし)。';
     const ratio = content.w ? content.w / content.h : 0;
     $('simAspect').textContent = ratio
@@ -633,6 +702,16 @@ window.SimulatorWorkspace = (() => {
   }
 
   function syncTimeUi() {
+    if (S.source.kind === 'sources') {
+      const has = strip.segs.length > 0 && Player.duration > 0;
+      $('simPlay').disabled = !has;
+      $('simPlay').textContent = Player.playing ? '❚❚' : '▶';
+      $('simTime').disabled = !has;
+      $('simTime').max = Math.max(0.01, Player.duration || 1);
+      if (document.activeElement !== $('simTime')) $('simTime').value = Player.time;
+      $('simTimeLabel').textContent = has ? `${fmtTime(Player.time)} / ${fmtTime(Player.duration)}` : '--:--';
+      return;
+    }
     const v = content.video;
     const dur = v ? v.duration : content.duration;
     const playable = !!v;
@@ -829,6 +908,10 @@ window.SimulatorWorkspace = (() => {
       changed({ figures: false });
     };
     $('simPlay').onclick = () => {
+      if (S.source.kind === 'sources') {
+        Player.toggle();
+        return;
+      }
       const v = content.video;
       if (!v) return;
       if (v.paused) v.play();
@@ -838,6 +921,10 @@ window.SimulatorWorkspace = (() => {
     };
     $('simTime').addEventListener('input', () => {
       const t = Number($('simTime').value);
+      if (S.source.kind === 'sources') {
+        Player.seek(t);
+        return;
+      }
       if (content.video) {
         content.video.currentTime = t;
         contentDirty = true;
@@ -1008,8 +1095,9 @@ window.SimulatorWorkspace = (() => {
     },
     show() {
       visible = true;
-      // レイアウト編集の内容は変わっている可能性があるので、表示のたびに取り直す (静止画 1 枚なので軽い)
-      if (S.source.kind === 'layout' || !content.el) reloadContent();
+      Player.on(onPlayer);
+      // ソース動画の構成は変わっている可能性があるので、表示のたびに並べ直す
+      if (S.source.kind === 'sources' || !content.el) reloadContent();
       syncAll();
       invalidate();
     },
@@ -1022,7 +1110,8 @@ window.SimulatorWorkspace = (() => {
       look = null;
       view2d.drag = null;
       if (content.video) content.video.pause();
-      syncTimeUi();
+      Player.pause(); // 非表示のタブでは再生しない
+      Player.off(onPlayer);
     },
     /** 表示の切り替え ('elevation' | 'eye' | 'compare') */
     setView(v) {
@@ -1039,6 +1128,7 @@ window.SimulatorWorkspace = (() => {
     setState(s) {
       const d = defaults();
       S = { ...d, ...s, wall: { ...d.wall, ...(s.wall || {}) }, cam: { ...d.cam, ...(s.cam || {}) }, source: { ...d.source, ...(s.source || {}) } };
+      if (S.source.kind !== 'file') S.source.kind = 'sources'; // 旧版の 'layout' (合成結果) はソース動画に置き換え
       if (!Array.isArray(S.figures) || !S.figures.length) S.figures = d.figures;
       seq = Math.max(seq, ...S.figures.map((f) => f.id + 1));
       syncAll();

@@ -28,5 +28,8 @@ contextBridge.exposeInMainWorld('api', {
   onProgress: (cb) => ipcRenderer.on('export:progress', (_e, d) => cb(d)),
   onLog: (cb) => ipcRenderer.on('export:log', (_e, d) => cb(d)),
   onDone: (cb) => ipcRenderer.on('export:done', (_e, d) => cb(d)),
+  setDirty: (v) => ipcRenderer.send('app:dirty', !!v),
+  closeNow: () => ipcRenderer.send('app:close-now'),
+  onSaveAndClose: (cb) => ipcRenderer.on('app:save-and-close', () => cb()),
   devReady: () => ipcRenderer.send('dev:ready-signal'),
 });

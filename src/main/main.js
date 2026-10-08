@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const ff = require('./ffmpeg');
@@ -7,13 +7,20 @@ const { buildPlan } = require('./command');
 const C = require('./codecs');
 
 let win = null;
+const APP_ICON = nativeImage.createFromPath(path.join(__dirname, '..', 'renderer', 'assets', 'icon.png'));
+
+// Windows のタスクバーで Electron ではなく MIR-app として扱われるようにする (package.json の appId と同じ)
+if (process.platform === 'win32') app.setAppUserModelId('local.mir-app');
 let currentJob = null;
+let docDirty = false; // レンダラから通知される「未保存の変更あり」
+let forceClose = false;
 
 const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'mxf', 'ts', 'm2ts', 'mts', 'mpg', 'mpeg', 'wmv', 'flv', 'y4m'];
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
 
 function createWindow() {
   win = new BrowserWindow({
+    icon: APP_ICON, // ウィンドウ・タスクバーのアイコン (開発時の npm start でも MIR-app のアイコンにする)
     width: 1500,
     height: 920,
     minWidth: 1100,
@@ -33,14 +40,31 @@ function createWindow() {
     : null);
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // 閉じるときの確認はメインプロセスで行う
+  // (レンダラの beforeunload で止めると、Electron では何も表示されずに閉じられなくなるため)
   win.on('close', (e) => {
+    if (forceClose) return;
     if (currentJob) {
       const r = dialog.showMessageBoxSync(win, {
         type: 'warning', buttons: ['書き出しを中止して終了', 'キャンセル'], defaultId: 1, cancelId: 1,
         message: '書き出し中です。終了しますか？',
       });
-      if (r !== 0) e.preventDefault();
-      else currentJob.cancel();
+      if (r !== 0) {
+        e.preventDefault();
+        return;
+      }
+      currentJob.kill(); // アプリと一緒に FFmpeg も確実に止める
+    }
+    if (docDirty) {
+      const r = dialog.showMessageBoxSync(win, {
+        type: 'question', buttons: ['保存して終了', '保存せずに終了', 'キャンセル'], defaultId: 0, cancelId: 2,
+        message: '保存されていない変更があります。', detail: '終了する前にプロジェクトを保存しますか？',
+      });
+      if (r === 2) e.preventDefault();
+      else if (r === 0) {
+        e.preventDefault();
+        win.webContents.send('app:save-and-close'); // 保存できたらレンダラが app:close-now を送る
+      }
     }
   });
 
@@ -80,6 +104,7 @@ ipcMain.handle('app:info', safe(async () => ({
   devSelect: Number(process.env.MIR_APP_SELECT) || 0,
   devWs: process.env.MIR_APP_WS || null,
   devSimView: process.env.MIR_APP_SIMVIEW || null,
+  devPlay: !!process.env.MIR_APP_PLAY,
 })));
 
 ipcMain.handle('app:hw', safe(() => ff.hwCaps()));
@@ -210,6 +235,14 @@ ipcMain.handle('project:open', safe(async () => {
 
 ipcMain.handle('fs:exists', safe((p) => fs.existsSync(p)));
 ipcMain.handle('shell:showItem', safe((p) => shell.showItemInFolder(p)));
+ipcMain.on('app:dirty', (_e, v) => {
+  docDirty = !!v;
+  if (win && !win.isDestroyed() && process.platform === 'darwin') win.setDocumentEdited(docDirty);
+});
+ipcMain.on('app:close-now', () => {
+  forceClose = true;
+  if (win && !win.isDestroyed()) win.close();
+});
 ipcMain.on('dev:ready-signal', () => ipcMain.emit('dev:ready'));
 
 function formatCommand(args) {
@@ -218,6 +251,7 @@ function formatCommand(args) {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock && !app.isPackaged) app.dock.setIcon(APP_ICON); // 開発時の Dock
   ff.hwCaps(); // 起動時に機能検出を始めておく
   createWindow();
 });
