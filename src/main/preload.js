@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   caps: () => call('app:caps'),
   hw: () => call('app:hw'),
   openVideos: (multi) => call('dialog:openVideos', multi),
+  openMedia: () => call('dialog:openMedia'),
   saveOutputDialog: (defaultPath, ext) => call('dialog:saveOutput', defaultPath, ext),
   probe: (file) => call('media:probe', file),
   frame: (file, time, maxWidth) => call('media:frame', file, time, maxWidth),

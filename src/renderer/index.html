@@ -2,56 +2,71 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: file:; media-src 'self' blob: file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
   <title>MIR-app</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="toolbar">
-    <div class="brand"><span class="logo">▦</span> MIR-app</div>
-    <div class="group">
-      <button id="btnNew" title="新規 (Ctrl+N)">新規</button>
-      <button id="btnOpen" title="開く (Ctrl+O)">開く</button>
-      <button id="btnSave" title="保存 (Ctrl+S)">保存</button>
-      <button id="btnSaveAs" title="名前を付けて保存 (Ctrl+Shift+S)">名前を付けて保存</button>
-    </div>
-    <div class="group">
-      <button id="btnUndo" title="元に戻す (Ctrl+Z)">↶</button>
-      <button id="btnRedo" title="やり直し (Ctrl+Y)">↷</button>
-    </div>
+  <!-- ===== アプリバー (全タブ共通): ブランド / タブ切り替え / ファイル操作 ===== -->
+  <header class="appbar">
+    <div class="brand"><img src="assets/logo.png" alt=""> MIR-app</div>
+    <nav class="ws-tabs" role="tablist" aria-label="機能">
+      <button class="ws-tab active" data-ws="layout" role="tab" aria-selected="true">レイアウト編集</button>
+      <button class="ws-tab" data-ws="simulator" role="tab" aria-selected="false">投影シミュレーター</button>
+    </nav>
     <div class="spacer"></div>
-    <span id="projectName" class="muted"></span>
-    <span id="ffmpegBadge" class="badge muted">FFmpeg 確認中…</span>
-    <button id="btnExportTop" class="primary">書き出し…</button>
+    <div class="file-ops">
+      <span id="projectName" class="project-name" title="プロジェクトファイル"></span>
+      <button id="btnNew" class="small" title="新規 (Ctrl+N)">新規</button>
+      <button id="btnOpen" class="small" title="開く (Ctrl+O)">開く</button>
+      <button id="btnSave" class="small" title="保存 (Ctrl+S)">保存</button>
+      <button id="btnSaveAs" class="small" title="名前を付けて保存 (Ctrl+Shift+S)">名前を付けて保存</button>
+    </div>
+    <div class="divider"></div>
+    <span id="ffmpegBadge" class="badge">FFmpeg 確認中…</span>
   </header>
 
-  <main class="layout">
-    <!-- 左: ソースとプリセット -->
+  <!-- ===================================================================
+       レイアウト編集
+       =================================================================== -->
+  <main class="workspace" data-ws="layout" id="ws-layout">
     <aside class="panel left">
-      <section>
-        <div class="section-head">
-          <h2>ソース動画</h2>
-          <button id="btnAddSource" class="small primary">＋ 追加</button>
-        </div>
-        <div id="sourceList" class="source-list"></div>
-        <div id="sourceEmpty" class="empty-hint">動画をここにドロップ<br>または「＋ 追加」</div>
-      </section>
-      <section>
-        <div class="section-head"><h2>分割・配置プリセット</h2></div>
-        <div id="presetList" class="preset-list"></div>
-        <button id="btnCustomSplit" class="block">カスタム分割配置…</button>
-      </section>
+      <div class="panel-head">
+        <h2>ソース動画</h2>
+        <button id="btnAddSource" class="small">＋ 追加</button>
+      </div>
+      <div class="panel-body">
+        <section>
+          <div id="sourceList" class="source-list"></div>
+          <div id="sourceEmpty" class="empty-hint">動画をここにドロップ<br>または「＋ 追加」</div>
+        </section>
+        <section>
+          <h2>分割・配置プリセット</h2>
+          <div id="presetList" class="preset-list"></div>
+          <button id="btnCustomSplit" class="preset">
+            <b>カスタム分割配置…</b><span>列数・行数と並べ方を指定して配置します。</span>
+          </button>
+        </section>
+      </div>
     </aside>
 
-    <!-- 中央: キャンバス -->
     <section class="stage-wrap">
-      <div class="stage-bar">
-        <span id="canvasInfo" class="muted"></span>
+      <div class="ws-toolbar">
+        <div class="toolbar-group">
+          <button id="btnUndo" class="small icon ghost" title="元に戻す (Ctrl+Z)" aria-label="元に戻す">↶</button>
+          <button id="btnRedo" class="small icon ghost" title="やり直し (Ctrl+Y)" aria-label="やり直し">↷</button>
+        </div>
+        <div class="divider"></div>
+        <span id="canvasInfo" class="toolbar-info"></span>
         <div class="spacer"></div>
-        <label class="check"><input type="checkbox" id="optSnap" checked> スナップ</label>
-        <label class="check"><input type="checkbox" id="optLabels" checked> ラベル</label>
-        <label class="check"><input type="checkbox" id="optGrid"> 罫線</label>
+        <div class="toolbar-group">
+          <label class="chip"><input type="checkbox" id="optSnap" checked> スナップ</label>
+          <label class="chip"><input type="checkbox" id="optLabels" checked> ラベル</label>
+          <label class="chip"><input type="checkbox" id="optGrid"> 罫線</label>
+        </div>
+        <div class="divider"></div>
         <button id="btnRealPreview" class="small" title="実際の FFmpeg フィルタで 1 フレーム合成します">実出力プレビュー</button>
+        <button id="btnExportTop" class="small primary">書き出し…</button>
       </div>
       <div id="stage" class="stage">
         <canvas id="stageCanvas"></canvas>
@@ -60,14 +75,13 @@
           <p>ソース動画を追加し、左のプリセットを選ぶか<br>タイルを追加してレイアウトを作成します。</p>
         </div>
       </div>
-      <div class="timeline">
+      <div class="ws-footer">
         <span class="muted">プレビュー位置</span>
         <input type="range" id="timeSlider" min="0" max="1" step="0.01" value="0">
         <span id="timeLabel" class="mono">00:00.00</span>
       </div>
     </section>
 
-    <!-- 右: プロパティ / 書き出し -->
     <aside class="panel right">
       <nav class="tabs">
         <button class="tab active" data-tab="layout">レイアウト</button>
@@ -77,7 +91,7 @@
       <div class="tab-body" id="tab-layout">
         <section>
           <h2>キャンバス (出力)</h2>
-          <div class="row">
+          <label>サイズ
             <select id="canvasPreset">
               <option value="3840x2160">4K UHD 3840×2160</option>
               <option value="4096x2160">DCI 4K 4096×2160</option>
@@ -88,10 +102,10 @@
               <option value="2160x3840">縦 4K 2160×3840</option>
               <option value="custom">カスタム</option>
             </select>
-          </div>
+          </label>
           <div class="grid2">
-            <label>幅<input type="number" id="canvasW" min="2" step="2"></label>
-            <label>高さ<input type="number" id="canvasH" min="2" step="2"></label>
+            <label>幅 <span class="unit">px</span><input type="number" id="canvasW" min="2" step="2"></label>
+            <label>高さ <span class="unit">px</span><input type="number" id="canvasH" min="2" step="2"></label>
             <label>フレームレート
               <select id="canvasFps">
                 <option value="auto">ソースと同じ</option>
@@ -111,9 +125,7 @@
         </section>
 
         <section id="tileProps" class="hidden">
-          <div class="section-head">
-            <h2>選択中のタイル <span id="tileTitle" class="muted"></span></h2>
-          </div>
+          <h2>選択中のタイル <span id="tileTitle" class="muted"></span></h2>
           <div class="grid2">
             <label>ソース<select id="tileSource"></select></label>
             <label>ラベル<input type="text" id="tileLabel"></label>
@@ -139,6 +151,7 @@
             <button id="btnTileFront" class="small" title="最前面へ">前面へ</button>
             <button id="btnTileBack" class="small" title="最背面へ">背面へ</button>
             <button id="btnTileDup" class="small" title="複製 (Ctrl+D)">複製</button>
+            <div class="spacer"></div>
             <button id="btnTileDel" class="small danger" title="削除 (Delete)">削除</button>
           </div>
         </section>
@@ -158,7 +171,7 @@
           <label>コーデック<select id="outCodec"></select></label>
           <label>エンコーダ<select id="outHw"></select></label>
           <label>画質<select id="outQuality"></select></label>
-          <label id="bitrateRow" class="hidden">ビットレート (Mbps)
+          <label id="bitrateRow" class="hidden">ビットレート <span class="unit">Mbps</span>
             <input type="number" id="outBitrate" min="0" step="1" placeholder="自動 (ソース相当)">
           </label>
           <label>ピクセルフォーマット
@@ -207,9 +220,9 @@
           </details>
         </section>
         <section class="export-actions">
-          <button id="btnStartExport" class="primary block big">書き出し開始</button>
-          <button id="btnCancelExport" class="danger block hidden">中止</button>
-          <div id="progressBox" class="progress-box hidden">
+          <button id="btnStartExport" class="primary block lg">書き出し開始</button>
+          <button id="btnCancelExport" class="danger solid block lg hidden">中止</button>
+          <div id="progressBox" class="hidden">
             <div class="progress"><div id="progressBar"></div></div>
             <div id="progressText" class="mono small-text"></div>
           </div>
@@ -218,6 +231,110 @@
             <summary>ログ</summary>
             <pre id="logView" class="log"></pre>
           </details>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ===================================================================
+       投影シミュレーター (スクリプトは初めて開いたときに読み込む)
+       =================================================================== -->
+  <main class="workspace" data-ws="simulator" id="ws-simulator" hidden>
+    <aside class="panel left">
+      <div class="panel-head"><h2>映像と壁面</h2></div>
+      <div class="panel-body">
+        <section>
+          <h2>投影する映像</h2>
+          <div class="seg block" id="simSourceSeg">
+            <button data-v="layout" class="active">レイアウト編集の結果</button>
+            <button data-v="file">ファイル</button>
+          </div>
+          <div id="simFileRow" class="file-pick hidden">
+            <button id="simPickFile" class="small">選択…</button>
+            <span id="simFileName" class="fname">未選択</span>
+          </div>
+          <div id="simSourceNote" class="note info"></div>
+        </section>
+        <section>
+          <h2>壁面</h2>
+          <div class="grid3">
+            <label>幅 <span class="unit">m</span><input type="number" id="simWallW" min="1" max="200" step="0.5"></label>
+            <label>高さ <span class="unit">m</span><input type="number" id="simWallH" min="0.5" max="50" step="0.1"></label>
+            <label>床から <span class="unit">m</span><input type="number" id="simWallB" min="0" max="20" step="0.1"></label>
+          </div>
+          <div class="field">
+            <span class="field-label">映像の合わせ方</span>
+            <div class="seg block" id="simFitSeg">
+              <button data-v="contain">全体を表示</button>
+              <button data-v="cover">全面に拡大</button>
+              <button data-v="stretch">引き伸ばし</button>
+            </div>
+          </div>
+          <div id="simAspect" class="small-text"></div>
+        </section>
+      </div>
+    </aside>
+
+    <section class="stage-wrap">
+      <div class="ws-toolbar">
+        <div class="seg" id="simViewSeg" role="tablist" aria-label="表示">
+          <button data-v="elevation" class="active">実寸比較</button>
+          <button data-v="eye">子供目線</button>
+          <button data-v="compare">目線比較</button>
+        </div>
+        <div class="divider"></div>
+        <span id="simInfo" class="toolbar-info"></span>
+        <div class="spacer"></div>
+        <div class="toolbar-group">
+          <label class="chip"><input type="checkbox" id="simOptGrid" checked> 1m グリッド</label>
+          <label class="chip"><input type="checkbox" id="simOptFigures" checked> 人物</label>
+        </div>
+        <div class="divider"></div>
+        <button id="simZoomFigures" class="small" title="人物の周辺を拡大します">人物に寄る</button>
+        <button id="simResetView" class="small">全体を表示</button>
+      </div>
+      <div id="simStage" class="stage">
+        <canvas id="simCanvas2d"></canvas>
+        <canvas id="simCanvasGl" hidden></canvas>
+        <div id="simHudL" class="hud l hidden"></div>
+        <div id="simHudR" class="hud r hidden"></div>
+        <div id="simHint" class="stage-hint"></div>
+      </div>
+      <div class="ws-footer">
+        <button id="simPlay" class="small icon" title="再生 / 一時停止" aria-label="再生">▶</button>
+        <span class="muted">再生位置</span>
+        <input type="range" id="simTime" min="0" max="1" step="0.01" value="0">
+        <span id="simTimeLabel" class="mono">00:00.00</span>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <div class="panel-head"><h2>人物と視点</h2></div>
+      <div class="panel-body">
+        <section>
+          <h2>人物</h2>
+          <div class="figure-cols"><span></span><span>名前</span><span>身長 cm</span><span>位置 m</span><span></span></div>
+          <div id="simFigureList" class="figure-list"></div>
+          <div class="row">
+            <select id="simAddPreset"></select>
+            <button id="simAddFigure" class="small">＋ 追加</button>
+          </div>
+          <div class="small-text">身長は日本の平均身長をもとにした目安です。値は自由に変更できます。<br>位置は壁の左端からの距離です。</div>
+        </section>
+        <section>
+          <h2>視点</h2>
+          <div class="grid2">
+            <label>目線の人物<select id="simViewer"></select></label>
+            <label>比較する人物<select id="simCompare"></select></label>
+          </div>
+          <div class="grid3">
+            <label>立ち位置 <span class="unit">m</span><input type="number" id="simPosX" step="0.1"></label>
+            <label>壁まで <span class="unit">m</span><input type="number" id="simPosZ" min="0.3" max="30" step="0.1"></label>
+            <label>視野角 <span class="unit">°</span><input type="number" id="simFov" min="30" max="120" step="5"></label>
+          </div>
+          <div id="simMetrics" class="metrics"></div>
+          <h3>立ち位置 (上から見た図)</h3>
+          <canvas id="simMinimap" class="minimap" title="クリック・ドラッグで立ち位置を移動"></canvas>
         </section>
       </div>
     </aside>
@@ -233,7 +350,7 @@
   <dialog id="splitDialog">
     <form method="dialog" class="dialog-body">
       <h2 id="splitTitle">分割・配置</h2>
-      <p id="splitDesc" class="muted"></p>
+      <p id="splitDesc" class="dialog-desc"></p>
       <div class="split-grid">
         <div>
           <label>対象ソース<select id="spTarget"></select></label>
@@ -271,7 +388,7 @@
         </div>
         <div>
           <canvas id="spPreview" class="sp-preview"></canvas>
-          <div id="spResult" class="muted center"></div>
+          <div id="spResult" class="muted"></div>
         </div>
       </div>
       <div class="btn-row end">
@@ -292,7 +409,9 @@
     </form>
   </dialog>
 
+  <script src="shell.js"></script>
   <script src="presets.js"></script>
   <script src="app.js"></script>
+  <script src="workspaces.js"></script>
 </body>
 </html>

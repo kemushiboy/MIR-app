@@ -1,8 +1,6 @@
-/* global Presets, api */
+/* global Presets, api, App, $, setStatus, fmtTime, clamp, debounce, escapeHtml, setupCanvas, cssVar */
 'use strict';
-
-// api は preload (contextBridge) が window.api として公開している
-const $ = (id) => document.getElementById(id);
+// レイアウト編集ワークスペース。共通ヘルパーは shell.js、api は preload (window.api) が提供する
 
 const COLORS = ['#ff6b6b', '#51cf66', '#4dabf7', '#ffd43b', '#cc5de8', '#ff922b', '#22b8cf', '#f06595', '#94d82d', '#845ef7'];
 const ALIGN = 2; // 4:2:0 を前提に座標とサイズは偶数に揃える
@@ -27,23 +25,11 @@ const state = {
 
 let caps = null;
 let lastPlan = null;
+let otherTabsDirty = false; // 他のタブ (シミュレーターなど) の未保存の変更
 
 // ==================================================================
 // 汎用
 // ==================================================================
-
-function setStatus(msg, kind = '') {
-  const el = $('status');
-  el.textContent = msg;
-  el.className = kind;
-}
-
-function fmtTime(s) {
-  if (!isFinite(s)) return '--:--';
-  const m = Math.floor(s / 60);
-  const sec = s - m * 60;
-  return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`;
-}
 
 function fmtBytes(b) {
   if (!b) return '0 B';
@@ -59,14 +45,6 @@ function fmtRate(r) {
 }
 
 const snapA = (v) => Math.round(v / ALIGN) * ALIGN;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const debounce = (fn, ms) => {
-  let t = null;
-  return (...a) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...a), ms);
-  };
-};
 
 const sourceById = (id) => state.sources.find((s) => s.id === id);
 const sourceIndex = (id) => state.sources.findIndex((s) => s.id === id);
@@ -99,7 +77,7 @@ function commit() {
   history.stack.push(snap);
   if (history.stack.length > 200) history.stack.shift();
   history.index = history.stack.length - 1;
-  state.dirty = history.index > 0;
+  state.dirty = history.index > 0 || otherTabsDirty;
   updateTitle();
   refreshAll();
 }
@@ -263,10 +241,10 @@ function renderSources(thumbOnly = false) {
         </div>
       </div>
       <div class="ctrl">
-        <label title="このソースの再生開始位置 (秒)。複数カメラの同期合わせに使います">開始<input type="number" step="0.001" min="0" value="${s.offset}"></label>
+        <label title="このソースの再生開始位置 (秒)。複数カメラの同期合わせに使います">開始 (秒)<input type="number" step="0.001" min="0" value="${s.offset}"></label>
         <button class="small" data-act="split" title="このソースだけを分割配置">分割…</button>
         <button class="small" data-act="replace" title="別のファイルに差し替え (タイルはそのまま)">差替</button>
-        <button class="small danger" data-act="remove" title="削除">✕</button>
+        <button class="small icon danger" data-act="remove" title="このソースを削除" aria-label="このソースを削除">✕</button>
       </div>`;
     const off = card.querySelector('input');
     off.addEventListener('change', () => {
@@ -279,10 +257,6 @@ function renderSources(thumbOnly = false) {
     card.querySelector('[data-act=remove]').onclick = () => removeSource(s);
     list.appendChild(card);
   });
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ==================================================================
@@ -439,20 +413,6 @@ $('splitDialog').addEventListener('close', () => {
 
 const stage = { scale: 1, ox: 0, oy: 0, drag: null, guides: [] };
 
-function setupCanvas(cv) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth;
-  const h = cv.clientHeight;
-  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
-    cv.width = Math.round(w * dpr);
-    cv.height = Math.round(h * dpr);
-  }
-  const ctx = cv.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.imageSmoothingQuality = 'high';
-  return ctx;
-}
-
 function tileProblems() {
   const bad = new Set();
   const W = state.canvas.width;
@@ -474,6 +434,7 @@ function tileProblems() {
 }
 
 function drawStage() {
+  if (!App.isActive('layout')) return; // 非表示中は描かない (show() で描き直す)
   const cv = $('stageCanvas');
   const ctx = setupCanvas(cv);
   const cw = cv.clientWidth;
@@ -794,6 +755,7 @@ $('btnAddTile').onclick = addTile;
 // --- 切り出しミニエディタ ---
 const crop = { scale: 1, ox: 0, oy: 0, drag: null };
 function drawCrop() {
+  if (!App.isActive('layout')) return;
   const t = tileById(state.selected);
   const cv = $('cropCanvas');
   if (!t || cv.offsetParent === null) return;
@@ -1117,13 +1079,13 @@ const refreshPlan = debounce(async () => {
       plan.warnings.map((n) => `<div class="note warn">${escapeHtml(n)}</div>`).join('');
     $('planCommand').textContent = plan.command;
     $('btnStartExport').disabled = state.exporting;
-    $('statusRight').textContent = `${i.codec} · ${i.encoder} · ${i.container}`;
+    if (App.isActive('layout') && !state.exporting) $('statusRight').textContent = `${i.codec} · ${i.encoder} · ${i.container}`;
   } catch (e) {
     lastPlan = null;
     box.innerHTML = `<div class="note err">${escapeHtml(e.message)}</div>`;
     $('planCommand').textContent = '';
     $('btnStartExport').disabled = true;
-    $('statusRight').textContent = '';
+    if (App.isActive('layout') && !state.exporting) $('statusRight').textContent = '';
   }
 }, 250);
 
@@ -1222,6 +1184,7 @@ function projectData() {
     canvas: state.canvas,
     tiles: state.tiles.map((t) => ({ source: sourceIndex(t.sourceId), label: t.label, crop: t.crop, dest: t.dest })),
     output: { ...state.output, audio: { mode: state.output.audio.mode, source: sourceIndex(state.output.audio.sourceId) } },
+    workspaces: App.collectState(), // 他のタブの設定
   };
 }
 
@@ -1231,6 +1194,7 @@ async function saveProject(as = false) {
     if (!p) return;
     state.projectPath = p;
     state.dirty = false;
+    otherTabsDirty = false;
     history.stack = [snapshot()];
     history.index = 0;
     updateTitle();
@@ -1256,6 +1220,7 @@ async function openProject() {
     return;
   }
   resetState();
+  App.applyState(d.workspaces || null);
   const missing = [];
   for (const [i, src] of (d.sources || []).entries()) {
     const s = { id: newId(), path: src.path, name: src.path.split(/[\\/]/).pop(), offset: src.offset || 0, probe: null, thumb: null, color: COLORS[i % COLORS.length], missing: true };
@@ -1281,6 +1246,7 @@ async function openProject() {
   state.projectPath = r.path;
   history.stack = [];
   history.index = -1;
+  otherTabsDirty = false;
   renderSources();
   commit();
   state.dirty = false;
@@ -1307,12 +1273,20 @@ function resetState() {
 function newProject() {
   if (state.dirty && !confirm('変更が保存されていません。破棄して新規作成しますか？')) return;
   resetState();
+  App.resetAll();
+  otherTabsDirty = false;
   history.stack = [];
   history.index = -1;
   renderSources();
   commit();
   syncFormsFromState();
 }
+
+App.onDirty(() => {
+  otherTabsDirty = true;
+  state.dirty = true;
+  updateTitle();
+});
 
 $('btnNew').onclick = newProject;
 $('btnOpen').onclick = openProject;
@@ -1326,13 +1300,15 @@ $('btnRedo').onclick = redo;
 // ==================================================================
 
 function showTab(name) {
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('#ws-layout .tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $('tab-layout').classList.toggle('hidden', name !== 'layout');
   $('tab-export').classList.toggle('hidden', name !== 'export');
+  // 主要操作は画面に 1 つ: 書き出しタブでは「書き出し開始」が主役なのでツールバー側は控えめにする
+  $('btnExportTop').classList.toggle('primary', name !== 'export');
   if (name === 'layout') drawCrop();
   else refreshPlan();
 }
-document.querySelectorAll('.tab').forEach((t) => (t.onclick = () => showTab(t.dataset.tab)));
+document.querySelectorAll('#ws-layout .tab').forEach((t) => (t.onclick = () => showTab(t.dataset.tab)));
 
 window.addEventListener('keydown', (e) => {
   const inField = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
@@ -1340,6 +1316,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveProject(e.shiftKey); return; }
   if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); openProject(); return; }
   if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); newProject(); return; }
+  if (!App.isActive('layout')) return; // 以降はレイアウト編集タブ専用のショートカット
   if (inField || document.querySelector('dialog[open]')) return;
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
@@ -1372,7 +1349,7 @@ window.addEventListener('drop', (e) => {
   e.preventDefault();
   document.body.classList.remove('dragover');
   const paths = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
-  if (paths.length) addSources(paths);
+  if (paths.length) App.dropFiles(paths); // 表示中のタブが受け取る
 });
 $('btnAddSource').onclick = async () => {
   const files = await api.openVideos(true);
@@ -1409,7 +1386,8 @@ function refreshAll() {
     const info = await api.info();
     const badge = $('ffmpegBadge');
     if (info.ffmpegVersion) {
-      badge.textContent = info.ffmpegVersion.replace(/^ffmpeg version (\S+).*/, 'FFmpeg $1').slice(0, 40);
+      const v = info.ffmpegVersion.match(/version n?(\d+(?:\.\d+)+)/);
+      badge.textContent = v ? `FFmpeg ${v[1]}` : 'FFmpeg';
       badge.title = `${info.ffmpegVersion}\n${info.ffmpegPath}`;
     } else {
       badge.textContent = 'FFmpeg が見つかりません';
@@ -1441,7 +1419,9 @@ function refreshAll() {
           if (!info.devPreset.endsWith('!')) $('splitDialog').close('apply');
         }
       }
-      setTimeout(() => {
+      setTimeout(async () => {
+        if (info.devWs) await App.show(info.devWs);
+        if (info.devSimView && window.SimulatorWorkspace) window.SimulatorWorkspace.setView(info.devSimView);
         if (info.devTab) showTab(info.devTab);
         if (info.devSelect && state.tiles[info.devSelect - 1]) selectTile(state.tiles[info.devSelect - 1].id);
         api.devReady();
@@ -1455,3 +1435,40 @@ function refreshAll() {
     api.devReady();
   }
 })();
+
+// ==================================================================
+// ワークスペースとしての公開 API (shell.js のライフサイクルに従う)
+// ==================================================================
+
+window.LayoutWorkspace = {
+  show() {
+    drawStage();
+    drawCrop();
+    refreshPlan(); // ステータスバー右側 (書き出し設定の要約) を戻す
+  },
+  hide() {
+    stage.drag = null;
+    crop.drag = null;
+    if (!state.exporting) $('statusRight').textContent = ''; // ステータスバーは表示中のタブのもの
+  },
+  onDropFiles: addSources,
+  /** 現在のレイアウトを、プレビュー位置の静止画として合成する (他のタブから利用) */
+  renderComposite(maxWidth = 4096) {
+    if (!state.tiles.length) return null;
+    const { width: W, height: H } = state.canvas;
+    const k = Math.min(1, maxWidth / W);
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(W * k);
+    cv.height = Math.round(H * k);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = state.canvas.background;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    for (const t of state.tiles) {
+      const s = sourceById(t.sourceId);
+      if (!s || !s.thumb) continue;
+      const q = s.thumb.scale;
+      ctx.drawImage(s.thumb.img, t.crop.x * q, t.crop.y * q, t.crop.w * q, t.crop.h * q, t.dest.x * k, t.dest.y * k, t.dest.w * k, t.dest.h * k);
+    }
+    return cv;
+  },
+};

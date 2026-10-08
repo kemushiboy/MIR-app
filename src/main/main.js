@@ -10,6 +10,7 @@ let win = null;
 let currentJob = null;
 
 const VIDEO_EXTS = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'mxf', 'ts', 'm2ts', 'mts', 'mpg', 'mpeg', 'wmv', 'flv', 'y4m'];
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
 
 function createWindow() {
   win = new BrowserWindow({
@@ -77,6 +78,8 @@ ipcMain.handle('app:info', safe(async () => ({
   devPreset: process.env.MIR_APP_PRESET || null,
   devTab: process.env.MIR_APP_TAB || null,
   devSelect: Number(process.env.MIR_APP_SELECT) || 0,
+  devWs: process.env.MIR_APP_WS || null,
+  devSimView: process.env.MIR_APP_SIMVIEW || null,
 })));
 
 ipcMain.handle('app:hw', safe(() => ff.hwCaps()));
@@ -100,6 +103,18 @@ ipcMain.handle('dialog:openVideos', safe(async (multi = true) => {
     filters: [{ name: '動画', extensions: VIDEO_EXTS }, { name: 'すべてのファイル', extensions: ['*'] }],
   });
   return r.canceled ? [] : r.filePaths;
+}));
+
+ipcMain.handle('dialog:openMedia', safe(async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: '映像または画像を選択',
+    properties: ['openFile'],
+    filters: [
+      { name: '動画・画像', extensions: [...VIDEO_EXTS, ...IMAGE_EXTS] },
+      { name: 'すべてのファイル', extensions: ['*'] },
+    ],
+  });
+  return r.canceled ? null : r.filePaths[0];
 }));
 
 ipcMain.handle('dialog:saveOutput', safe(async (defaultPath, ext) => {
