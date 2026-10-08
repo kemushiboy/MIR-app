@@ -98,6 +98,8 @@ macOS は [ffmpeg.martin-riedl.de](https://ffmpeg.martin-riedl.de/)（arm64 / x6
 
 - Actions タブ →「Build」→「Run workflow」で手動実行 → 完了後、各ジョブの Artifacts からダウンロード
 - `v1.0.0` のようなタグを push すると、ビルド後に GitHub Release を作成してインストーラを添付
+  - Release の本文には、この README の「インストールと初回起動」の節 (`scripts/release-notes.js` で生成) と、GitHub が自動生成する変更履歴が入ります
+  - アプリのバージョンと成果物のファイル名はタグに合わせます (例: `v1.2.0` → `MIR-app-1.2.0-…`)
 
 Windows ランナーと macOS ランナー (Apple Silicon、x64 版も同時に作成) が並行して動きます。
 

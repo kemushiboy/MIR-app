@@ -31,6 +31,12 @@ jobs:
       - name: Install
         run: npm ci
 
+      # タグ (例: v1.2.0) からビルドするときは、アプリのバージョンと成果物のファイル名をタグに合わせる
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+
       - name: Build
         run: npm run ${{ matrix.script }}
         env:
@@ -60,6 +66,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 本文: README の「インストールと初回起動」 + GitHub が自動生成する変更履歴
+      - name: Release notes
+        run: node scripts/release-notes.js "${GITHUB_REF_NAME}" > release-notes.md
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -67,3 +80,5 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
+          body_path: release-notes.md
+          generate_release_notes: true
