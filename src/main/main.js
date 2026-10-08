@@ -18,7 +18,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     backgroundColor: '#16181d',
-    title: 'MovieLayout',
+    title: 'MIR-app',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -43,16 +43,16 @@ function createWindow() {
     }
   });
 
-  // 開発用: MOVIELAYOUT_SCREENSHOT=<png> で起動するとスクリーンショットを保存して終了
-  if (process.env.MOVIELAYOUT_SCREENSHOT) {
+  // 開発用: MIR_APP_SCREENSHOT=<png> で起動するとスクリーンショットを保存して終了
+  if (process.env.MIR_APP_SCREENSHOT) {
     win.webContents.on('console-message', (e) => console.log(`[renderer:${e.level}] ${e.message}`));
     let shot = false;
     const capture = async () => {
       if (shot) return;
       shot = true;
-      await new Promise((r) => setTimeout(r, Number(process.env.MOVIELAYOUT_SCREENSHOT_DELAY || 2500)));
+      await new Promise((r) => setTimeout(r, Number(process.env.MIR_APP_SCREENSHOT_DELAY || 2500)));
       const img = await win.webContents.capturePage();
-      fs.writeFileSync(process.env.MOVIELAYOUT_SCREENSHOT, img.toPNG());
+      fs.writeFileSync(process.env.MIR_APP_SCREENSHOT, img.toPNG());
       app.exit(0);
     };
     ipcMain.once('dev:ready', capture);
@@ -73,10 +73,10 @@ ipcMain.handle('app:info', safe(async () => ({
   ffmpegPath: ff.FFMPEG,
   ffmpegVersion: await ff.version(),
   platform: process.platform,
-  devFiles: process.env.MOVIELAYOUT_OPEN ? process.env.MOVIELAYOUT_OPEN.split(path.delimiter) : [],
-  devPreset: process.env.MOVIELAYOUT_PRESET || null,
-  devTab: process.env.MOVIELAYOUT_TAB || null,
-  devSelect: Number(process.env.MOVIELAYOUT_SELECT) || 0,
+  devFiles: process.env.MIR_APP_OPEN ? process.env.MIR_APP_OPEN.split(path.delimiter) : [],
+  devPreset: process.env.MIR_APP_PRESET || null,
+  devTab: process.env.MIR_APP_TAB || null,
+  devSelect: Number(process.env.MIR_APP_SELECT) || 0,
 })));
 
 ipcMain.handle('app:hw', safe(() => ff.hwCaps()));
@@ -173,7 +173,7 @@ ipcMain.handle('project:save', safe(async (data, currentPath) => {
     const r = await dialog.showSaveDialog(win, {
       title: 'レイアウトを保存',
       defaultPath: 'layout.mlayout.json',
-      filters: [{ name: 'MovieLayout プロジェクト', extensions: ['json'] }],
+      filters: [{ name: 'MIR-app プロジェクト', extensions: ['json'] }],
     });
     if (r.canceled) return null;
     file = r.filePath;
@@ -186,7 +186,7 @@ ipcMain.handle('project:open', safe(async () => {
   const r = await dialog.showOpenDialog(win, {
     title: 'レイアウトを開く',
     properties: ['openFile'],
-    filters: [{ name: 'MovieLayout プロジェクト', extensions: ['json'] }],
+    filters: [{ name: 'MIR-app プロジェクト', extensions: ['json'] }],
   });
   if (r.canceled) return null;
   const file = r.filePaths[0];

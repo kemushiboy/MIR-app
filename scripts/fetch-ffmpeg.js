@@ -36,7 +36,7 @@ function parseTargets() {
 
 function get(url, { json = false } = {}) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': 'MovieLayout-fetch-ffmpeg' } }, (res) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'MIR-app-fetch-ffmpeg' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume();
         resolve(get(new URL(res.headers.location, url).toString(), { json }));
@@ -161,7 +161,7 @@ async function fetchTarget(target) {
   const assets = await resolveAssets(target);
 
   // ダウンロード物は専用の空ディレクトリに展開する
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'movielayout-ffmpeg-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'mir-app-ffmpeg-'));
   try {
     for (const a of assets) {
       const archive = path.join(work, a.name);

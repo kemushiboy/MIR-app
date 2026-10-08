@@ -313,7 +313,7 @@ async function renderPreview(args) {
 }
 
 function tempFile(ext) {
-  return path.join(os.tmpdir(), `movielayout-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
+  return path.join(os.tmpdir(), `mir-app-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
 }
 
 module.exports = {

@@ -134,7 +134,7 @@ function redo() {
 function updateTitle() {
   const name = state.projectPath ? state.projectPath.split(/[\\/]/).pop() : '無題';
   $('projectName').textContent = name + (state.dirty ? ' *' : '');
-  document.title = `${name}${state.dirty ? ' *' : ''} - MovieLayout`;
+  document.title = `${name}${state.dirty ? ' *' : ''} - MIR-app`;
 }
 
 // ==================================================================
@@ -1216,7 +1216,7 @@ $('btnCancelExport').onclick = () => api.cancelExport();
 
 function projectData() {
   return {
-    app: 'MovieLayout',
+    app: 'MIR-app',
     version: 1,
     sources: state.sources.map((s) => ({ path: s.path, offset: s.offset || 0 })),
     canvas: state.canvas,
@@ -1251,8 +1251,8 @@ async function openProject() {
   }
   if (!r) return;
   const d = r.data;
-  if (d.app !== 'MovieLayout') {
-    setStatus('MovieLayout のプロジェクトファイルではありません', 'err');
+  if (d.app !== 'MIR-app' && d.app !== 'MovieLayout') { // 旧名で保存したファイルも開ける
+    setStatus('MIR-app のプロジェクトファイルではありません', 'err');
     return;
   }
   resetState();

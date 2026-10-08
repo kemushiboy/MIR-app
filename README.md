@@ -1,4 +1,4 @@
-# MovieLayout
+# MIR-app
 
 動画を **切り出し（分割）→ 再配置 → 1 本の動画として書き出す** Electron アプリです。FFmpeg を同梱しています。
 
@@ -35,8 +35,8 @@ npm start
 
 | 対象 | 実行する場所 | コマンド | 出力 (`dist/`) |
 |---|---|---|---|
-| Windows x64 | Windows | `npm run dist:win` | `MovieLayout-<ver>-win-x64-setup.exe` (インストーラ)<br>`MovieLayout-<ver>-win-x64-portable.exe` (ポータブル) |
-| macOS (Apple Silicon / Intel) | Mac | `npm run dist:mac` | `MovieLayout-<ver>-mac-arm64.dmg` / `.zip`<br>`MovieLayout-<ver>-mac-x64.dmg` / `.zip` |
+| Windows x64 | Windows | `npm run dist:win` | `MIR-app-<ver>-win-x64-setup.exe` (インストーラ)<br>`MIR-app-<ver>-win-x64-portable.exe` (ポータブル) |
+| macOS (Apple Silicon / Intel) | Mac | `npm run dist:mac` | `MIR-app-<ver>-mac-arm64.dmg` / `.zip`<br>`MIR-app-<ver>-mac-x64.dmg` / `.zip` |
 
 > electron-builder の制約で、**macOS 版は macOS 上でしかビルドできません**（Windows で実行するとエラーになります）。
 > Mac が手元にない場合は、下の GitHub Actions を使ってください。
@@ -61,7 +61,7 @@ Windows ランナーと macOS ランナー (Apple Silicon、x64 版も同時に�
 - **Windows**: SmartScreen の「Windows によって PC が保護されました」→「詳細情報」→「実行」で起動できます。
 - **macOS**: 署名・公証のないアプリは Gatekeeper にブロックされます。Finder でアプリを右クリック →「開く」、
   または「システム設定 → プライバシーとセキュリティ」で「このまま開く」を選びます。
-  「壊れているため開けません」と表示される場合は、ターミナルで `xattr -dr com.apple.quarantine /Applications/MovieLayout.app` を実行してください。
+  「壊れているため開けません」と表示される場合は、ターミナルで `xattr -dr com.apple.quarantine /Applications/MIR-app.app` を実行してください。
 
 警告なしで配布するには、GitHub の Secrets (または手元の環境変数) に次を設定します。
 
