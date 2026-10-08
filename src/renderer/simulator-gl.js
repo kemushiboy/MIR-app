@@ -23,7 +23,7 @@ void main() {
 precision highp float;
 in vec2 vUv;
 in vec3 vWorld;
-uniform int uMode;          // 0: 単色, 1: テクスチャ, 2: テクスチャ (透明部分を抜く)
+uniform int uMode;          // 0: 単色, 1: テクスチャ, 2: テクスチャ (透明部分を抜く), 3: 半透明の単色
 uniform vec4 uColor;
 uniform sampler2D uTex;
 uniform float uGrid;        // 0 ならグリッドなし。>0 ならグリッド間隔 (m)
@@ -40,7 +40,7 @@ float gridLine(vec2 p) {
 
 void main() {
   vec4 c = uColor;
-  if (uMode >= 1) {
+  if (uMode == 1 || uMode == 2) {
     c = texture(uTex, vUv);
     if (uMode == 2 && c.a < 0.5) discard;
   }
@@ -49,7 +49,7 @@ void main() {
     c.rgb = mix(c.rgb, uGridColor.rgb, gridLine(p) * uGridColor.a);
   }
   float fog = smoothstep(18.0, 45.0, distance(vWorld, uCam));
-  outColor = vec4(mix(c.rgb, uFogColor, fog), 1.0);
+  outColor = vec4(mix(c.rgb, uFogColor, fog), uMode == 3 ? c.a : 1.0);
 }`;
 
   // ---- 行列 (列優先) ----
@@ -245,6 +245,13 @@ void main() {
       const top = Math.max(B + H + 2.5, 6);
       const depth = 45;
 
+      // 16:9 の枠の外 (黒帯)
+      gl.disable(gl.SCISSOR_TEST);
+      gl.viewport(0, 0, cw, ch);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.SCISSOR_TEST);
+
       for (const v of views) {
         const vx = Math.round(v.x * dpr);
         const vy = Math.round(ch - (v.y + v.h) * dpr);
@@ -275,6 +282,22 @@ void main() {
           gl.bindTexture(gl.TEXTURE_2D, this.contentTex);
           this._set(1, null, scene.grid ? 1 : 0, 1);
           this._quad([c.x, c.y, 0.004], [c.x + c.w, c.y, 0.004], [c.x + c.w, c.y + c.h, 0.004], [c.x, c.y + c.h, 0.004], c.uv);
+        }
+        // インタラクション範囲 (半透明で重ねる)
+        if (scene.zones && scene.zones.length) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          gl.depthMask(false);
+          for (const z of scene.zones) {
+            this._set(3, C.zone);
+            this._quad([z.x0, z.y0, 0.006], [z.x1, z.y0, 0.006], [z.x1, z.y1, 0.006], [z.x0, z.y1, 0.006]);
+            this._set(3, C.zoneEdge);
+            const e = 0.025;
+            this._quad([z.x0, z.y0, 0.007], [z.x0 + e, z.y0, 0.007], [z.x0 + e, z.y1, 0.007], [z.x0, z.y1, 0.007]);
+            this._quad([z.x1 - e, z.y0, 0.007], [z.x1, z.y0, 0.007], [z.x1, z.y1, 0.007], [z.x1 - e, z.y1, 0.007]);
+          }
+          gl.depthMask(true);
+          gl.disable(gl.BLEND);
         }
         // 人物 (壁と平行に立つ板)
         for (const f of scene.figures) {

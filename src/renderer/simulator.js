@@ -14,6 +14,8 @@
 window.SimulatorWorkspace = (() => {
   let seq = 1;
   const DEG = Math.PI / 180;
+  // 人物目線の既定: 壁から 1.5m、視線は水平、焦点距離 50mm (人の目に近い標準)
+  const DEFAULT_CAM = { z: 1.5, yaw: 0, pitch: 0, focal: 50 };
 
   // ------------------------------------------------------------------
   // 状態 (プロジェクトファイルに保存される)
@@ -23,19 +25,38 @@ window.SimulatorWorkspace = (() => {
       ['3歳', 95, 6.5], ['5歳', 109, 8], ['8歳 (小3)', 128, 9.5], ['大人', 165, 11.5],
     ].map(([label, height, x], i) => ({ id: seq++, label, height, x, color: Figures.COLORS[i % Figures.COLORS.length] }));
     return {
-      wall: { width: 20, height: 3, bottom: 0, fit: 'contain' },
+      // 絵コンテ (50cm 方眼) から読み取った実寸: 映像全体 19.69m × 2.77m。下端は床面 (0m)
+      wall: { width: 19.69, height: 2.77, bottom: 0, fit: 'contain' },
+      // インタラクション範囲 (壁の左端からの距離 m)。絵コンテの紫の範囲
+      zones: [{ id: seq++, x0: 3.43, x1: 6.92 }, { id: seq++, x0: 12.36, x1: 15.84 }],
       source: { kind: 'sources', path: null },
       figures: figs,
       viewerId: figs[1].id,
       compareId: figs[3].id,
-      cam: { x: 10, z: 4, yaw: 0, pitch: 8 * DEG, hfov: 90 },
+      cam: { ...DEFAULT_CAM, x: figs[1].x }, // 目線の人物 (5歳) の立ち位置
       view: 'elevation',
       showGrid: true,
       showFigures: true,
+      showZones: true,
     };
   }
 
   let S = defaults();
+
+  // ------------------------------------------------------------------
+  // 視点の画角: 35mm 判換算の焦点距離で指定する (横 36mm のフィルム幅を画面の横幅に対応させる)
+  // ------------------------------------------------------------------
+  const FOCAL_PRESETS = [
+    { mm: 50, desc: '標準レンズ。人の目で注視したときの遠近感に近い' },
+    { mm: 35, desc: 'やや広め。注視点の周りまで含めた見え方' },
+    { mm: 24, desc: '広角。首を動かさずに見渡せる範囲の目安' },
+    { mm: 17, desc: '超広角。周辺視野までを含めた広さ (端がゆがんで見えます)' },
+  ];
+  const hfovDeg = (mm) => (2 * Math.atan(18 / mm)) / DEG;
+  const focalNote = (mm) => {
+    const p = FOCAL_PRESETS.find((x) => x.mm === mm);
+    return `水平画角 ${hfovDeg(mm).toFixed(1)}°${p ? ` — ${p.desc}` : ''}`;
+  };
 
   // ------------------------------------------------------------------
   // 実行時の状態
@@ -56,6 +77,8 @@ window.SimulatorWorkspace = (() => {
   const figById = (id) => S.figures.find((f) => f.id === id);
   const viewerFig = () => figById(S.viewerId) || S.figures[0];
   const compareFig = () => figById(S.compareId) || S.figures[S.figures.length - 1];
+
+  const ZONE = { fill: 'rgba(142, 127, 191, .42)', edge: 'rgba(201, 191, 255, .95)', text: '#d9d1ff' }; // = --zone
 
   function colors() {
     return {
@@ -317,6 +340,11 @@ window.SimulatorWorkspace = (() => {
     ctx.fillRect(0, 0, cw, Y(0));
     ctx.fillStyle = '#17191e';
     ctx.fillRect(0, Y(0), cw, ch - Y(0));
+    // 床より下 (映像の下端が床にかかる部分) は描かない
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, cw, Y(0));
+    ctx.clip();
     // 投影範囲と映像
     ctx.fillStyle = '#08090b';
     ctx.fillRect(X(0), Y(B + H), W * T.scale, H * T.scale);
@@ -348,6 +376,20 @@ window.SimulatorWorkspace = (() => {
       }
       ctx.setLineDash([]);
     }
+    // インタラクション範囲
+    if (S.showZones) {
+      const y0 = Math.max(B, 0);
+      for (const z of S.zones) {
+        const x = X(z.x0);
+        const w = (z.x1 - z.x0) * T.scale;
+        ctx.fillStyle = ZONE.fill;
+        ctx.fillRect(x, Y(B + H), w, (B + H - y0) * T.scale);
+        ctx.strokeStyle = ZONE.edge;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(Math.round(x) + 0.5, Math.round(Y(B + H)) + 0.5, Math.round(w), Math.round((B + H - y0) * T.scale));
+        if (w > 60) label(ctx, `インタラクション ${(z.x1 - z.x0).toFixed(2)}m`, x + w / 2, Y(y0) - 6, ZONE.text, 'center');
+      }
+    }
     // 1m グリッド
     if (S.showGrid) {
       ctx.strokeStyle = 'rgba(255,255,255,.14)';
@@ -368,6 +410,7 @@ window.SimulatorWorkspace = (() => {
     ctx.strokeStyle = col.muted;
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(X(0)) + 0.5, Math.round(Y(B + H)) + 0.5, Math.round(W * T.scale), Math.round(H * T.scale));
+    ctx.restore();
     // 床の線
     ctx.strokeStyle = col.text2;
     ctx.beginPath();
@@ -487,11 +530,12 @@ window.SimulatorWorkspace = (() => {
     label(ctx, `幅 ${W}m`, (X(0) + X(W)) / 2, yDim + 8, col.text, 'center');
     // 高さ (投影範囲の右)
     const xR = X(W) + 14;
-    arrow(ctx, xR, Y(B), xR, Y(B + H));
+    const yb = Math.max(B, 0);
+    arrow(ctx, xR, Y(yb), xR, Y(B + H));
     ctx.save();
-    ctx.translate(xR + 4, (Y(B) + Y(B + H)) / 2);
+    ctx.translate(xR + 4, (Y(yb) + Y(B + H)) / 2);
     ctx.rotate(-Math.PI / 2);
-    label(ctx, `高さ ${H}m`, 0, -2, col.text, 'center');
+    label(ctx, B < 0 ? `床から ${(B + H).toFixed(2)}m` : `高さ ${H}m`, 0, -2, col.text, 'center');
     ctx.restore();
   }
 
@@ -538,41 +582,56 @@ window.SimulatorWorkspace = (() => {
       wall: S.wall,
       content: content.el ? { x: p.x, y: p.y, w: p.w, h: p.h, uv: [cx0, 1 - cy1, cx1, 1 - cy0] } : null,
       figures: S.showFigures ? S.figures.filter((f) => f.id !== S.viewerId && !(S.view === 'compare' && f.id === S.compareId))
-        .map((f) => ({ x: f.x, z: 0.45, height: f.height, color: f.color })) : [],
+        .map((f) => ({ x: f.x, z: S.cam.z, height: f.height, color: f.color })) : [], // 目線の人物と同じ列に並ぶ
       grid: S.showGrid,
+      zones: S.showZones ? S.zones.map((z) => ({ x0: z.x0, x1: z.x1, y0: Math.max(S.wall.bottom, 0), y1: S.wall.bottom + S.wall.height })) : [],
       colors: {
         floor: SimGL.hex('#1b1d22'), wall: SimGL.hex('#2a2d34'), screen: SimGL.hex('#08090b'),
-        fog: SimGL.hex('#111317'), grid: [1, 1, 1, 0.16],
+        fog: SimGL.hex('#111317'), grid: [1, 1, 1, 0.16], zone: SimGL.hex('#8e7fbf', 0.4), zoneEdge: SimGL.hex('#c9bfff', 0.95),
       },
     };
     const cv = cvGl();
     const w = cv.clientWidth;
     const h = cv.clientHeight;
     const cam = S.cam;
-    const mk = (fig, x, vw) => ({
-      x, y: 0, w: vw, h, eye: [cam.x, Figures.eyeHeight(fig.height) / 100, cam.z], yaw: cam.yaw, pitch: cam.pitch, hfov: cam.hfov * DEG,
+    // 16:9 の枠を領域 (ax, aw) の中央に置く。余りは黒帯
+    const fit169 = (ax, aw) => {
+      const vw = Math.floor(Math.min(aw, (h * 16) / 9));
+      const vh = Math.floor((vw * 9) / 16);
+      return { x: ax + Math.floor((aw - vw) / 2), y: Math.floor((h - vh) / 2), w: vw, h: vh };
+    };
+    const mk = (fig, box) => ({
+      ...box, eye: [cam.x, Figures.eyeHeight(fig.height) / 100, cam.z], yaw: cam.yaw, pitch: cam.pitch, hfov: hfovDeg(cam.focal) * DEG,
     });
     const vf = viewerFig();
     const views = [];
     if (S.view === 'compare') {
-      const half = Math.floor(w / 2);
-      views.push(mk(vf, 0, half - 1), mk(compareFig(), half + 1, w - half - 1));
+      const half = Math.floor((w - 8) / 2);
+      views.push(mk(vf, fit169(0, half)), mk(compareFig(), fit169(w - half, half)));
     } else {
-      views.push(mk(vf, 0, w));
+      views.push(mk(vf, fit169(0, w)));
     }
     r.render(scene, views);
-    hud();
-    $('simInfo').textContent = `立ち位置 ${cam.x.toFixed(1)}m · 壁まで ${cam.z.toFixed(1)}m · 視野角 ${cam.hfov}°`;
+    hud(views);
+    $('simInfo').textContent = `壁まで ${cam.z.toFixed(1)}m · 焦点距離 ${cam.focal}mm (水平 ${hfovDeg(cam.focal).toFixed(0)}°)`;
   }
 
-  function hud() {
+  function hud(views) {
     const one = (f) => `<b>${escapeHtml(f.label)}の目線</b><br>目の高さ ${Math.round(Figures.eyeHeight(f.height))}cm`;
+    const place = (el, v) => {
+      el.style.left = `${v.x + 12}px`;
+      el.style.top = `${v.y + 12}px`;
+    };
     const l = $('simHudL');
     const r = $('simHudR');
     l.innerHTML = one(viewerFig());
     l.classList.remove('hidden');
+    place(l, views[0]);
     r.classList.toggle('hidden', S.view !== 'compare');
-    if (S.view === 'compare') r.innerHTML = one(compareFig());
+    if (S.view === 'compare') {
+      r.innerHTML = one(compareFig());
+      place(r, views[1]);
+    }
   }
 
   function walk(dt) {
@@ -595,7 +654,7 @@ window.SimulatorWorkspace = (() => {
     c.x = clamp(c.x, -10, S.wall.width + 10);
     c.z = clamp(c.z, 0.3, 30);
     c.pitch = clamp(c.pitch, -80 * DEG, 80 * DEG);
-    c.hfov = clamp(c.hfov, 30, 120);
+    c.focal = Math.round(clamp(c.focal, 10, 200));
   }
 
   // ------------------------------------------------------------------
@@ -630,17 +689,21 @@ window.SimulatorWorkspace = (() => {
     ctx.fillRect(X(-1), Z(0) - 4, (W + 2) * scale, 4);
     ctx.fillStyle = col.accent;
     ctx.fillRect(X(0), Z(0) - 4, W * scale, 4);
+    if (S.showZones) {
+      ctx.fillStyle = ZONE.fill;
+      for (const z of S.zones) ctx.fillRect(X(z.x0), Z(0) - 4, (z.x1 - z.x0) * scale, 10);
+    }
     // 人物
     for (const f of S.figures) {
       ctx.fillStyle = f.color;
       ctx.beginPath();
-      ctx.arc(X(f.x), Z(0.45), 3, 0, Math.PI * 2);
+      ctx.arc(X(f.x), Z(S.cam.z), 3, 0, Math.PI * 2);
       ctx.fill();
     }
     // 視点と視野
     if (S.view !== 'elevation') {
       const c = S.cam;
-      const half = (c.hfov * DEG) / 2;
+      const half = (hfovDeg(c.focal) * DEG) / 2;
       const len = 3.5 * scale;
       ctx.fillStyle = 'rgba(34, 211, 238, .18)';
       ctx.beginPath();
@@ -666,7 +729,8 @@ window.SimulatorWorkspace = (() => {
     const { height: H, bottom: B } = S.wall;
     const top = B + H;
     const up = Math.atan2(top - eye, S.cam.z) / DEG;
-    const pos = clamp(((eye - B) / H) * 100, 0, 100);
+    const vb = Math.max(B, 0); // 床から上に見えている範囲で比べる
+    const pos = clamp(((eye - vb) / (top - vb)) * 100, 0, 100);
     const items = [
       ['目の高さ', Math.round(eye * 100), 'cm'],
       ['映像上端の見上げ角', up.toFixed(0), '°'],
@@ -695,8 +759,9 @@ window.SimulatorWorkspace = (() => {
         (bad ? ' 再生できない形式のソースは静止画で表示します。' : '')
       : content.still ? 'この形式はアプリ内で再生できないため静止画で表示します。再生位置スライダーでフレームを選べます。' : '動画は再生ボタンで再生できます (音声なし)。';
     const ratio = content.w ? content.w / content.h : 0;
+    const below = S.wall.bottom < 0 ? ` / 映像の下端 ${(-S.wall.bottom).toFixed(2)}m は床より下 (隠れる部分)` : '';
     $('simAspect').textContent = ratio
-      ? `映像 ${content.w}×${content.h} (横縦比 ${ratio.toFixed(2)}) / 壁面の横縦比 ${(S.wall.width / S.wall.height).toFixed(2)}`
+      ? `映像 ${content.w}×${content.h} (横縦比 ${ratio.toFixed(2)}) / 壁面の横縦比 ${(S.wall.width / S.wall.height).toFixed(2)}${below}`
       : '';
     syncTimeUi();
   }
@@ -740,7 +805,7 @@ window.SimulatorWorkspace = (() => {
         <button class="small icon ghost danger" title="削除" aria-label="${escapeHtml(f.label)}を削除">✕</button>`;
       const [hIn, xIn] = row.querySelectorAll('input');
       row.querySelector('.name').onclick = () => {
-        S.viewerId = f.id;
+        setViewer(f.id);
         changed();
       };
       hIn.onchange = () => {
@@ -767,13 +832,55 @@ window.SimulatorWorkspace = (() => {
     $('simCompare').value = String(S.compareId);
   }
 
+  /** 目線の人物を切り替え、視点をその人物の立ち位置に移す */
+  function setViewer(id) {
+    S.viewerId = id;
+    const f = viewerFig();
+    if (f) S.cam.x = f.x;
+  }
+
+  function renderZones() {
+    const list = $('simZoneList');
+    list.innerHTML = '';
+    S.zones.forEach((z, i) => {
+      const row = document.createElement('div');
+      row.className = 'zone-row';
+      row.innerHTML = `
+        <span class="swatch zone-swatch"></span>
+        <input type="number" step="0.01" value="${z.x0}" aria-label="範囲${i + 1}の開始 (m)">
+        <input type="number" step="0.01" value="${z.x1}" aria-label="範囲${i + 1}の終了 (m)">
+        <span class="w">${(z.x1 - z.x0).toFixed(2)}m</span>
+        <button class="small icon ghost danger" title="削除" aria-label="範囲${i + 1}を削除">✕</button>`;
+      const [a, b] = row.querySelectorAll('input');
+      const apply = () => {
+        const v0 = Number(a.value);
+        const v1 = Number(b.value);
+        if (Number.isFinite(v0) && Number.isFinite(v1)) {
+          z.x0 = Math.min(v0, v1);
+          z.x1 = Math.max(v0, v1);
+        }
+        changed({ figures: false });
+      };
+      a.onchange = apply;
+      b.onchange = apply;
+      row.querySelector('button').onclick = () => {
+        S.zones = S.zones.filter((x) => x !== z);
+        changed({ figures: false });
+      };
+      list.appendChild(row);
+    });
+    if (!S.zones.length) list.innerHTML = '<div class="small-text">範囲はありません</div>';
+  }
+
   function syncViewInputs() {
     const set = (id, v) => {
       if (document.activeElement !== $(id)) $(id).value = v;
     };
     set('simPosX', S.cam.x.toFixed(1));
     set('simPosZ', S.cam.z.toFixed(1));
-    set('simFov', S.cam.hfov);
+    set('simFocal', S.cam.focal);
+    setSeg('simFocalSeg', String(S.cam.focal));
+    $('simFocalNote').textContent = focalNote(S.cam.focal);
     updateMetrics();
   }
 
@@ -785,8 +892,10 @@ window.SimulatorWorkspace = (() => {
     setSeg('simViewSeg', S.view);
     $('simOptGrid').checked = S.showGrid;
     $('simOptFigures').checked = S.showFigures;
+    $('simOptZones').checked = S.showZones;
     applyView();
     renderFigures();
+    renderZones();
     syncViewInputs();
     updateSourceUi();
   }
@@ -794,6 +903,7 @@ window.SimulatorWorkspace = (() => {
   /** 状態が変わった: 再描画し、未保存の印を付ける */
   function changed({ figures = true } = {}) {
     if (figures) renderFigures();
+    renderZones();
     syncViewInputs();
     updateSourceUi();
     App.markDirty();
@@ -824,11 +934,27 @@ window.SimulatorWorkspace = (() => {
     });
     num('simWallW', (v) => (S.wall.width = clamp(v, 1, 200)));
     num('simWallH', (v) => (S.wall.height = clamp(v, 0.5, 50)));
-    num('simWallB', (v) => (S.wall.bottom = clamp(v, 0, 20)));
+    num('simWallB', (v) => (S.wall.bottom = clamp(v, -5, 20)));
     num('simPosX', (v) => (S.cam.x = v));
     num('simPosZ', (v) => (S.cam.z = v));
-    num('simFov', (v) => (S.cam.hfov = v));
-    ['simPosX', 'simPosZ', 'simFov'].forEach((id) => $(id).addEventListener('change', clampCam));
+    num('simFocal', (v) => (S.cam.focal = v));
+    ['simPosX', 'simPosZ', 'simFocal'].forEach((id) => $(id).addEventListener('change', clampCam));
+    $('simFocalSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      S.cam.focal = Number(b.dataset.v);
+      changed({ figures: false });
+    });
+    $('simOptZones').addEventListener('change', () => {
+      S.showZones = $('simOptZones').checked;
+      changed({ figures: false });
+    });
+    $('simAddZone').onclick = () => {
+      const last = S.zones.length ? Math.max(...S.zones.map((z) => z.x1)) : 0;
+      const x0 = Math.min(last + 1, Math.max(0, S.wall.width - 3.5));
+      S.zones.push({ id: seq++, x0, x1: Math.min(S.wall.width, x0 + 3.5) });
+      changed({ figures: false });
+    };
 
     $('simFitSeg').addEventListener('click', (e) => {
       const b = e.target.closest('button');
@@ -866,7 +992,7 @@ window.SimulatorWorkspace = (() => {
       changed({ figures: false });
     });
     $('simViewer').addEventListener('change', () => {
-      S.viewerId = Number($('simViewer').value);
+      setViewer(Number($('simViewer').value));
       changed();
     });
     $('simCompare').addEventListener('change', () => {
@@ -904,7 +1030,7 @@ window.SimulatorWorkspace = (() => {
       view2d.zoom = 1;
       view2d.panX = 0;
       view2d.panY = 0;
-      Object.assign(S.cam, { x: S.wall.width / 2, z: 4, yaw: 0, pitch: 8 * DEG, hfov: 90 });
+      Object.assign(S.cam, { ...DEFAULT_CAM, x: viewerFig() ? viewerFig().x : S.wall.width / 2 });
       changed({ figures: false });
     };
     $('simPlay').onclick = () => {
@@ -985,7 +1111,7 @@ window.SimulatorWorkspace = (() => {
       view2d.drag = null;
       if (!d) return;
       if (d.kind === 'figure') {
-        if (!d.moved) S.viewerId = d.f.id; // クリック = 目線に設定
+        if (!d.moved) setViewer(d.f.id); // クリック = 目線に設定
         changed();
       }
     });
@@ -1014,7 +1140,7 @@ window.SimulatorWorkspace = (() => {
     });
     cg.addEventListener('pointermove', (e) => {
       if (!look) return;
-      const k = (S.cam.hfov / 90) * 0.004;
+      const k = (hfovDeg(S.cam.focal) / 90) * 0.004;
       S.cam.yaw = look.yaw + (e.clientX - look.sx) * k;
       S.cam.pitch = look.pitch - (e.clientY - look.sy) * k;
       clampCam();
@@ -1027,7 +1153,8 @@ window.SimulatorWorkspace = (() => {
     });
     cg.addEventListener('wheel', (e) => {
       e.preventDefault();
-      S.cam.hfov = Math.round(clamp(S.cam.hfov + Math.sign(e.deltaY) * 5, 30, 120));
+      // ホイールで焦点距離を変える (ズーム)
+      S.cam.focal = Math.round(clamp(S.cam.focal * Math.exp(Math.sign(e.deltaY) * -0.1), 10, 200));
       syncViewInputs();
       invalidate();
     }, { passive: false });
@@ -1129,6 +1256,10 @@ window.SimulatorWorkspace = (() => {
       const d = defaults();
       S = { ...d, ...s, wall: { ...d.wall, ...(s.wall || {}) }, cam: { ...d.cam, ...(s.cam || {}) }, source: { ...d.source, ...(s.source || {}) } };
       if (S.source.kind !== 'file') S.source.kind = 'sources'; // 旧版の 'layout' (合成結果) はソース動画に置き換え
+      if (!Array.isArray(S.zones)) S.zones = d.zones;
+      if (!(S.cam.focal > 0)) S.cam.focal = s.cam && s.cam.hfov ? Math.round(18 / Math.tan((s.cam.hfov * DEG) / 2)) : DEFAULT_CAM.focal; // 旧版は視野角 (°)
+      delete S.cam.hfov;
+      seq = Math.max(seq, ...S.zones.map((z) => (z.id || 0) + 1));
       if (!Array.isArray(S.figures) || !S.figures.length) S.figures = d.figures;
       seq = Math.max(seq, ...S.figures.map((f) => f.id + 1));
       syncAll();

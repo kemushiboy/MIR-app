@@ -260,9 +260,9 @@
         <section>
           <h2>壁面</h2>
           <div class="grid3">
-            <label>幅 <span class="unit">m</span><input type="number" id="simWallW" min="1" max="200" step="0.5"></label>
-            <label>高さ <span class="unit">m</span><input type="number" id="simWallH" min="0.5" max="50" step="0.1"></label>
-            <label>床から <span class="unit">m</span><input type="number" id="simWallB" min="0" max="20" step="0.1"></label>
+            <label>幅 <span class="unit">m</span><input type="number" id="simWallW" min="1" max="200" step="0.01"></label>
+            <label>映像の高さ <span class="unit">m</span><input type="number" id="simWallH" min="0.5" max="50" step="0.01"></label>
+            <label title="映像の下端の高さ。マイナスは床より下 (床に隠れる)">下端 <span class="unit">m</span><input type="number" id="simWallB" min="-5" max="20" step="0.01"></label>
           </div>
           <div class="field">
             <span class="field-label">映像の合わせ方</span>
@@ -273,6 +273,15 @@
             </div>
           </div>
           <div id="simAspect" class="small-text"></div>
+        </section>
+        <section>
+          <div class="section-head">
+            <h2>インタラクション範囲</h2>
+            <button id="simAddZone" class="small">＋ 追加</button>
+          </div>
+          <div class="zone-cols"><span></span><span>開始 m</span><span>終了 m</span><span>幅</span><span></span></div>
+          <div id="simZoneList" class="figure-list"></div>
+          <div class="small-text">壁の左端からの距離です。初期値は絵コンテの紫の範囲 (各 約 3.5m)。</div>
         </section>
       </div>
     </aside>
@@ -288,8 +297,9 @@
         <span id="simInfo" class="toolbar-info"></span>
         <div class="spacer"></div>
         <div class="toolbar-group">
-          <label class="chip"><input type="checkbox" id="simOptGrid" checked> 1m グリッド</label>
+          <label class="chip" title="1m ごとのグリッド"><input type="checkbox" id="simOptGrid" checked> グリッド</label>
           <label class="chip"><input type="checkbox" id="simOptFigures" checked> 人物</label>
+          <label class="chip" title="インタラクション範囲"><input type="checkbox" id="simOptZones" checked> インタラクション</label>
         </div>
         <div class="divider"></div>
         <button id="simZoomFigures" class="small" title="人物の周辺を拡大します">人物に寄る</button>
@@ -332,7 +342,17 @@
           <div class="grid3">
             <label>立ち位置 <span class="unit">m</span><input type="number" id="simPosX" step="0.1"></label>
             <label>壁まで <span class="unit">m</span><input type="number" id="simPosZ" min="0.3" max="30" step="0.1"></label>
-            <label>視野角 <span class="unit">°</span><input type="number" id="simFov" min="30" max="120" step="5"></label>
+            <label title="35mm 判換算の焦点距離">焦点距離 <span class="unit">mm</span><input type="number" id="simFocal" min="10" max="200" step="1"></label>
+          </div>
+          <div class="field">
+            <span class="field-label">画角 (35mm 判換算)</span>
+            <div class="seg block" id="simFocalSeg">
+              <button data-v="50">50mm 標準</button>
+              <button data-v="35">35mm</button>
+              <button data-v="24">24mm</button>
+              <button data-v="17">17mm</button>
+            </div>
+            <div id="simFocalNote" class="small-text"></div>
           </div>
           <div id="simMetrics" class="metrics"></div>
           <h3>立ち位置 (上から見た図)</h3>
