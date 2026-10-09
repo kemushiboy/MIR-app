@@ -38,7 +38,12 @@ jobs:
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
 
       - name: Build
-        run: npm run ${{ matrix.script }}
+        shell: bash
+        # 証明書の Secrets が未設定だと空文字が入り、electron-builder (macOS) が「証明書ファイルのパス」と
+        # 誤解して失敗するため、空のときは変数ごと消してから署名なしでビルドする
+        run: |
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
+          npm run ${{ matrix.script }}
         env:
           # 署名用の Secrets は任意。未設定なら署名なしでビルドする
           # macOS: Developer ID Application 証明書 (.p12 を base64 化したもの) とパスワード
