@@ -119,6 +119,19 @@ node scripts/test-export.js test-videos/out.mp4 split-lr-stack test-videos/cam1_
 node scripts/test-paths.js test-videos/cam1_h264.mp4 test-videos
 ```
 
+### README のスクリーンショット
+
+`docs/images/` の画像は、次のコマンドで撮り直せます (画面を変更したときに実行してください)。
+
+```bash
+node scripts/make-screenshots.js
+```
+
+- Full HD 4 本分のテストパターン (7680×1080、`scripts/make-test-pattern.js` で `test-videos/` に生成) を読み込み、
+  「左右分割 → 上下に配置」を適用した状態で、レイアウト編集・書き出し・投影シミュレーターの 3 表示を撮影します。
+- 撮影の手順は `scripts/screenshot-harness/main.js` にあります。ユーザー名などを含むパスが写らないよう、
+  出力先は例のパスに置き換え、ステータスバーは「準備完了」にしてから撮ります。
+
 ### 開発用の環境変数
 
 起動直後の状態を指定して画面を確認するためのものです (`MIR_APP_SCREENSHOT` を付けると画面を保存して終了します)。
@@ -149,6 +162,7 @@ src/renderer/style.css       デザイントークンと共通部品
 src/renderer/app.js          レイアウト編集タブ (presets.js: 分割配置プリセット)
 src/renderer/simulator*.js   投影シミュレータータブ (初めて開いたときに読み込む)
 docs/DESIGN.md               デザインと実装のルール (タブを追加するときに参照)
-scripts/                     FFmpeg 取得・リリースノート生成・テスト用スクリプト
+scripts/                     FFmpeg 取得・リリースノート生成・スクリーンショット・テスト用スクリプト
+docs/images/                 README のスクリーンショット (scripts/make-screenshots.js で生成)
 .github/workflows/build.yml  Windows / macOS のビルドと Release 作成
 ```
