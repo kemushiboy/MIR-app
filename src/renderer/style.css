@@ -290,13 +290,13 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
    投影シミュレーター タブ
    ================================================================== */
 .figure-list { display: flex; flex-direction: column; gap: var(--sp-1); margin-bottom: var(--sp-3); }
-.figure-row { display: grid; grid-template-columns: 10px 1fr 64px 64px var(--h-sm); align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); border: 1px solid transparent; }
+.figure-row { display: grid; grid-template-columns: 10px 1fr 50px 50px 50px var(--h-sm); align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); border: 1px solid transparent; }
 .figure-row:hover { background: var(--surface-2); }
 .figure-row.viewer { background: var(--accent-soft); border-color: var(--accent-strong); }
 .figure-row .name { font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .figure-row .name small { color: var(--muted); margin-left: var(--sp-1); }
 .figure-row input { height: var(--h-sm); padding: 0 var(--sp-1); font-size: var(--fs-sm); }
-.figure-cols { display: grid; grid-template-columns: 10px 1fr 64px 64px var(--h-sm); gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-1); font-size: var(--fs-xs); color: var(--muted); }
+.figure-cols { display: grid; grid-template-columns: 10px 1fr 50px 50px 50px var(--h-sm); gap: var(--sp-2); padding: 0 var(--sp-2) var(--sp-1); font-size: var(--fs-xs); color: var(--muted); }
 .zone-row, .zone-cols { display: grid; grid-template-columns: 10px 1fr 1fr 52px var(--h-sm); align-items: center; gap: var(--sp-2); }
 .zone-row { padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); }
 .zone-row:hover { background: var(--surface-2); }

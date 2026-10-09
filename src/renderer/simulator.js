@@ -23,7 +23,7 @@ window.SimulatorWorkspace = (() => {
   function defaults() {
     const figs = [
       ['3歳', 95, 6.5], ['5歳', 109, 8], ['8歳 (小3)', 128, 9.5], ['大人', 165, 11.5],
-    ].map(([label, height, x], i) => ({ id: seq++, label, height, x, color: Figures.COLORS[i % Figures.COLORS.length] }));
+    ].map(([label, height, x], i) => ({ id: seq++, label, height, x, z: DEFAULT_CAM.z, color: Figures.COLORS[i % Figures.COLORS.length] }));
     return {
       // 絵コンテ (50cm 方眼) から読み取った実寸: 映像全体 19.69m × 2.77m。下端は床面 (0m)
       wall: { width: 19.69, height: 2.77, bottom: 0, fit: 'contain' },
@@ -35,9 +35,9 @@ window.SimulatorWorkspace = (() => {
       compareId: figs[3].id,
       cam: { ...DEFAULT_CAM, x: figs[1].x }, // 目線の人物 (5歳) の立ち位置
       view: 'elevation',
-      showGrid: true,
-      showFigures: true,
-      showZones: true,
+      showGrid: false,
+      showFigures: false,
+      showZones: false,
     };
   }
 
@@ -582,7 +582,7 @@ window.SimulatorWorkspace = (() => {
       wall: S.wall,
       content: content.el ? { x: p.x, y: p.y, w: p.w, h: p.h, uv: [cx0, 1 - cy1, cx1, 1 - cy0] } : null,
       figures: S.showFigures ? S.figures.filter((f) => f.id !== S.viewerId && !(S.view === 'compare' && f.id === S.compareId))
-        .map((f) => ({ x: f.x, z: S.cam.z, height: f.height, color: f.color })) : [], // 目線の人物と同じ列に並ぶ
+        .map((f) => ({ x: f.x, z: f.z, height: f.height, color: f.color })) : [], // 人物はその場に立ったまま
       grid: S.showGrid,
       zones: S.showZones ? S.zones.map((z) => ({ x0: z.x0, x1: z.x1, y0: Math.max(S.wall.bottom, 0), y1: S.wall.bottom + S.wall.height })) : [],
       colors: {
@@ -655,6 +655,12 @@ window.SimulatorWorkspace = (() => {
     c.z = clamp(c.z, 0.3, 30);
     c.pitch = clamp(c.pitch, -80 * DEG, 80 * DEG);
     c.focal = Math.round(clamp(c.focal, 10, 200));
+    // 目線の人物 = 自分。視点を動かすとその人物の立ち位置も動く (ほかの人物は動かない)
+    const vf = viewerFig();
+    if (vf) {
+      vf.x = Math.round(c.x * 100) / 100;
+      vf.z = Math.round(c.z * 100) / 100;
+    }
   }
 
   // ------------------------------------------------------------------
@@ -697,7 +703,7 @@ window.SimulatorWorkspace = (() => {
     for (const f of S.figures) {
       ctx.fillStyle = f.color;
       ctx.beginPath();
-      ctx.arc(X(f.x), Z(S.cam.z), 3, 0, Math.PI * 2);
+      ctx.arc(X(f.x), Z(f.z), 3, 0, Math.PI * 2);
       ctx.fill();
     }
     // 視点と視野
@@ -802,8 +808,9 @@ window.SimulatorWorkspace = (() => {
         <span class="name" title="クリックでこの人物の目線にする">${escapeHtml(f.label)}${f.id === S.viewerId ? '<small>目線</small>' : ''}</span>
         <input type="number" min="40" max="220" step="1" value="${f.height}" aria-label="${escapeHtml(f.label)}の身長 (cm)">
         <input type="number" step="0.1" value="${f.x}" aria-label="${escapeHtml(f.label)}の位置 (m)">
+        <input type="number" step="0.1" min="0.3" value="${f.z}" aria-label="${escapeHtml(f.label)}の壁からの距離 (m)">
         <button class="small icon ghost danger" title="削除" aria-label="${escapeHtml(f.label)}を削除">✕</button>`;
-      const [hIn, xIn] = row.querySelectorAll('input');
+      const [hIn, xIn, zIn] = row.querySelectorAll('input');
       row.querySelector('.name').onclick = () => {
         setViewer(f.id);
         changed();
@@ -814,6 +821,12 @@ window.SimulatorWorkspace = (() => {
       };
       xIn.onchange = () => {
         f.x = clamp(Number(xIn.value) || 0, -5, S.wall.width + 5);
+        if (f.id === S.viewerId) S.cam.x = f.x;
+        changed();
+      };
+      zIn.onchange = () => {
+        f.z = clamp(Number(zIn.value) || DEFAULT_CAM.z, 0.3, 30);
+        if (f.id === S.viewerId) S.cam.z = f.z;
         changed();
       };
       row.querySelector('button').onclick = () => {
@@ -836,7 +849,10 @@ window.SimulatorWorkspace = (() => {
   function setViewer(id) {
     S.viewerId = id;
     const f = viewerFig();
-    if (f) S.cam.x = f.x;
+    if (f) {
+      S.cam.x = f.x;
+      S.cam.z = f.z;
+    }
   }
 
   function renderZones() {
@@ -1005,7 +1021,7 @@ window.SimulatorWorkspace = (() => {
       const p = Figures.PRESETS.find((x) => x.id === $('simAddPreset').value);
       const used = S.figures.map((f) => f.x);
       const x = used.length ? Math.min(S.wall.width, Math.max(...used) + 1.5) : S.wall.width / 2;
-      const f = { id: seq++, label: p.label, height: p.height, x, color: Figures.COLORS[S.figures.length % Figures.COLORS.length] };
+      const f = { id: seq++, label: p.label, height: p.height, x, z: DEFAULT_CAM.z, color: Figures.COLORS[S.figures.length % Figures.COLORS.length] };
       S.figures.push(f);
       changed();
     };
@@ -1031,6 +1047,7 @@ window.SimulatorWorkspace = (() => {
       view2d.panX = 0;
       view2d.panY = 0;
       Object.assign(S.cam, { ...DEFAULT_CAM, x: viewerFig() ? viewerFig().x : S.wall.width / 2 });
+      clampCam();
       changed({ figures: false });
     };
     $('simPlay').onclick = () => {
@@ -1100,6 +1117,7 @@ window.SimulatorWorkspace = (() => {
         const dx = (e.clientX - d.sx) / T.scale;
         if (Math.abs(e.clientX - d.sx) > 2) d.moved = true;
         d.f.x = Math.round(clamp(d.x0 + dx, -1, S.wall.width + 1) * 10) / 10; // 10cm 単位
+        if (d.f.id === S.viewerId) S.cam.x = d.f.x;
       } else {
         view2d.panX = d.px + (e.clientX - d.sx);
         view2d.panY = d.py + (e.clientY - d.sy);
@@ -1177,7 +1195,10 @@ window.SimulatorWorkspace = (() => {
     });
     mm.addEventListener('pointermove', (e) => mini.drag && moveTo(e));
     mm.addEventListener('pointerup', () => {
-      if (mini.drag) App.markDirty();
+      if (mini.drag) {
+        renderFigures();
+        App.markDirty();
+      }
       mini.drag = false;
     });
 
@@ -1199,7 +1220,10 @@ window.SimulatorWorkspace = (() => {
   }
   function onKeyUp(e) {
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (keys.delete(k) && keys.size === 0) App.markDirty();
+    if (keys.delete(k) && keys.size === 0) {
+      renderFigures();
+      App.markDirty();
+    }
   }
 
   // ------------------------------------------------------------------
@@ -1261,6 +1285,7 @@ window.SimulatorWorkspace = (() => {
       delete S.cam.hfov;
       seq = Math.max(seq, ...S.zones.map((z) => (z.id || 0) + 1));
       if (!Array.isArray(S.figures) || !S.figures.length) S.figures = d.figures;
+      S.figures.forEach((f) => { if (!(f.z > 0)) f.z = DEFAULT_CAM.z; });
       seq = Math.max(seq, ...S.figures.map((f) => f.id + 1));
       syncAll();
       releaseVideo();
